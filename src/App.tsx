@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   Home, 
   LayoutGrid, 
@@ -25,18 +25,332 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 
 // --- Types ---
-type Screen = 'landing' | 'input' | 'dashboard';
+type Screen = 'landing' | 'input' | 'dashboard' | 'report';
 type Language = 'English' | 'Hindi' | 'Marathi';
 type CropStage = 'Seedling' | 'Vegetative' | 'Flowering' | 'Harvest';
+type Crop = 'Maize' | 'Wheat' | 'Rice' | 'Cotton';
+
+type WeatherSummary = {
+  temperature: number;
+  condition: string;
+  humidity: number;
+  windSpeed: number;
+  forecastSummary: string;
+};
+
+type RecommendationData = {
+  id: number;
+  irrigationText: string;
+  fertilizerText: string;
+  rationale: string;
+  progress: number;
+  nextStage?: string;
+  reasons?: string[];
+  irrigationMm?: number;
+  fertilizerNKg?: number;
+  fertilizerPKg?: number;
+  fertilizerKKg?: number;
+};
+
+type SensorReading = {
+  sensorReadingId: number;
+  createdAt: string;
+  crop: string;
+  stage: string;
+  moisture: number;
+  n: number;
+  p: number;
+  k: number;
+  ph: number;
+  locationName: string | null;
+  lat: number | null;
+  lon: number | null;
+};
+
+type AnalyticsSummary = {
+  runsCount: number;
+  totalIrrigationMm: number;
+  avgIrrigationMm: number | null;
+  totalFertilizerNKg: number;
+  totalFertilizerPKg: number;
+  totalFertilizerKKg: number;
+};
+
+type SoilReportResponse = {
+  runId: number;
+  createdAt: string;
+  sensor: {
+    sensorReadingId: number;
+    createdAt: string;
+    crop: string;
+    stage: string;
+    moisture: number;
+    n: number;
+    p: number;
+    k: number;
+    ph: number;
+    locationName: string | null;
+    lat: number | null;
+    lon: number | null;
+  };
+  recommendation: {
+    irrigationWhen: string | null;
+    irrigationMm: number | null;
+    fertilizerNKg: number | null;
+    fertilizerPKg: number | null;
+    fertilizerKKg: number | null;
+    reasons: string[];
+    rationale: string | null;
+    progress: number | null;
+    nextStage: string | null;
+  };
+  weather: WeatherSummary | null;
+};
+
+const COPY: Record<Language, any> = {
+  English: {
+    nav: { home: 'Home', input: 'Input', analysis: 'Analysis', profile: 'Profile' },
+    landing: {
+      heroTitle1: 'Smart Farming',
+      heroTitle2: 'Decisions, Simplified',
+      heroSubtitle: 'Empowering farmers with AI-driven insights for better yields and healthier soil.',
+      chooseLanguage: 'Choose Your Language',
+      ecoSmartTitle: 'Eco-Smart',
+      ecoSmartDesc: 'AI insights optimized for sustainable land management.',
+      accuracy: 'Accuracy',
+      irrigation: 'Irrigation',
+      continue: 'Continue',
+    },
+    input: {
+      fieldAnalysis: 'Field Analysis',
+      fieldStatusTitle: 'Field Status Update',
+      fieldStatusDesc: 'Enter current soil and crop metrics to receive your AI-powered optimization strategy.',
+      soilMoistureLabel: 'Soil Moisture (%)',
+      soilMoistureSub: 'Current volumetric water content',
+      dry: 'Dry',
+      optimal: 'Optimal',
+      saturated: 'Saturated',
+      cropStageTitle: 'Crop Stage',
+      cropStageSub: 'Select the current growth phase',
+      cropTypeTitle: 'Crop Type',
+      cropTypeSub: 'Select crop to tailor recommendations',
+      phLabel: 'Soil pH',
+      phSub: 'Acidity / alkalinity of soil',
+      nutrientN: 'Nitrogen (N)',
+      nutrientP: 'Phosphorus (P)',
+      nutrientK: 'Potassium (K)',
+      stageSeedling: 'Seedling',
+      stageVegetative: 'Vegetative',
+      stageFlowering: 'Flowering',
+      stageHarvest: 'Harvest',
+      getRecommendation: 'Get Recommendation',
+      calculating: 'Calculating...',
+      realTimeSatelliteSensor: 'Calculated using real-time satellite & sensor data',
+      recommendationFailed: 'Failed to get recommendation. Please try again.',
+      gpsLoading: 'Getting GPS location...',
+      gpsUsing: 'Using GPS location.',
+      gpsDenied: 'GPS not available. Please select a city.',
+      selectCity: 'Select city',
+    },
+    dashboard: {
+      currentWeather: 'Current Weather',
+      humidity: 'Humidity',
+      windSpeed: 'Wind Speed',
+      todaysProtocol: "Today's Protocol",
+      smartRecommendations: 'Smart Recommendations',
+      actionRequired: 'Action Required',
+      fertilization: 'Fertilization',
+      analysisRationale: 'Analysis Rationale',
+      viewDetailedSoilReport: 'View Detailed Soil Report',
+      progressTitle: 'Growth Stage',
+      progressRight: 'Next Stage',
+      stageSowing: 'Sowing',
+      stageVegetative: 'Vegetative',
+      stageFlowering: 'Flowering',
+      stageHarvest: 'Harvest',
+      latestMonitoringTitle: 'Latest Monitoring',
+      trendsTitle: 'Trends (Last 5 readings)',
+      analyticsTitle: 'Usage Analytics',
+      reasonsTitle: 'Explainable Reasons',
+      protocolIrrigationFallback: 'Irrigate today',
+      protocolFertilizerFallback: 'Apply 20kg Nitrogen',
+      rationaleFallback:
+        'Soil moisture is low and temperature is high, which increases water loss through evapotranspiration. Nitrogen levels may be below the optimal threshold for the vegetative stage, risking stunted growth if not addressed within 24 hours.',
+      alertMoisture: 'Moisture',
+      alertN: 'N',
+      alertP: 'P',
+      alertK: 'K',
+      alertStage: 'Stage',
+    },
+  },
+  Hindi: {
+    nav: { home: 'होम', input: 'इनपुट', analysis: 'विश्लेषण', profile: 'प्रोफाइल' },
+    landing: {
+      heroTitle1: 'स्मार्ट खेती',
+      heroTitle2: 'निर्णय, सरल किए गए',
+      heroSubtitle: 'बेहतर उत्पादन और स्वस्थ मिट्टी के लिए किसानों को AI-आधारित अंतर्दृष्टि।',
+      chooseLanguage: 'अपनी भाषा चुनें',
+      ecoSmartTitle: 'ईको- स्मार्ट',
+      ecoSmartDesc: 'सतत भूमि प्रबंधन के लिए अनुकूलित AI अंतर्दृष्टि।',
+      accuracy: 'सटीकता',
+      irrigation: 'सिंचाई',
+      continue: 'जारी रखें',
+    },
+    input: {
+      fieldAnalysis: 'फसल विश्लेषण',
+      fieldStatusTitle: 'खेत की स्थिति अपडेट',
+      fieldStatusDesc: 'AI-आधारित ऑप्टिमाइज़ेशन रणनीति पाने के लिए वर्तमान मिट्टी और फसल मेट्रिक्स दर्ज करें।',
+      soilMoistureLabel: 'मिट्टी की नमी (%)',
+      soilMoistureSub: 'वर्तमान वॉल्यूमेट्रिक जल सामग्री',
+      dry: 'सूखी',
+      optimal: 'उत्तम',
+      saturated: 'संतृप्त',
+      cropStageTitle: 'फसल का चरण',
+      cropStageSub: 'विकास के वर्तमान चरण का चयन करें',
+      cropTypeTitle: 'फसल का प्रकार',
+      cropTypeSub: 'अनुशंसाएं फसल के अनुसार बनती हैं',
+      phLabel: 'मिट्टी का pH',
+      phSub: 'मिट्टी की अम्लीयता / क्षारीयता',
+      nutrientN: 'नाइट्रोजन (N)',
+      nutrientP: 'फॉस्फोरस (P)',
+      nutrientK: 'पोटैशियम (K)',
+      stageSeedling: 'अंकुर अवस्था',
+      stageVegetative: 'वनस्पतिक अवस्था',
+      stageFlowering: 'फूल आने की अवस्था',
+      stageHarvest: 'कटाई अवस्था',
+      getRecommendation: 'सिफारिश लें',
+      calculating: 'गणना हो रही है...',
+      realTimeSatelliteSensor: 'रियल-टाइम सैटेलाइट और सेंसर डेटा से गणना की गई',
+      recommendationFailed: 'सिफारिश नहीं मिल पाई। कृपया फिर से प्रयास करें।',
+      gpsLoading: 'आपका GPS स्थान प्राप्त किया जा रहा है...',
+      gpsUsing: 'GPS स्थान उपयोग किया जा रहा है।',
+      gpsDenied: 'GPS उपलब्ध नहीं है। कृपया शहर चुनें।',
+      selectCity: 'शहर चुनें',
+    },
+    dashboard: {
+      currentWeather: 'वर्तमान मौसम',
+      humidity: 'आर्द्रता',
+      windSpeed: 'हवा की रफ्तार',
+      todaysProtocol: 'आज की प्रक्रिया',
+      smartRecommendations: 'स्मार्ट सिफारिशें',
+      actionRequired: 'तुरंत करने योग्य',
+      fertilization: 'उर्वरक',
+      analysisRationale: 'विश्लेषण का कारण',
+      viewDetailedSoilReport: 'विस्तृत मिट्टी रिपोर्ट देखें',
+      progressTitle: 'वृद्धि चरण',
+      progressRight: 'अगला चरण',
+      stageSowing: 'बुवाई',
+      stageVegetative: 'वनस्पतिक',
+      stageFlowering: 'फूल आना',
+      stageHarvest: 'कटाई',
+      latestMonitoringTitle: 'नवीनतम निगरानी',
+      trendsTitle: 'ट्रेंड्स (पिछली 5 रीडिंग)',
+      analyticsTitle: 'उपयोग विश्लेषण',
+      reasonsTitle: 'समझने योग्य कारण',
+      protocolIrrigationFallback: 'आज सिंचाई करें',
+      protocolFertilizerFallback: '20 किग्रा नाइट्रोजन डालें',
+      rationaleFallback:
+        'मिट्टी की नमी कम है और तापमान अधिक है, जिससे बाष्पोत्सर्जन के कारण पानी की हानि बढ़ती है। नाइट्रोजन स्तर वनस्पतिक अवस्था के लिए इष्टतम सीमा से कम हो सकते हैं, जिससे 24 घंटों के भीतर ध्यान न देने पर वृद्धि रुक सकती है।',
+      alertMoisture: 'नमी',
+      alertN: 'N',
+      alertP: 'P',
+      alertK: 'K',
+      alertStage: 'चरण',
+    },
+  },
+  Marathi: {
+    nav: { home: 'होम', input: 'इनपुट', analysis: 'विश्लेषण', profile: 'प्रोफाइल' },
+    landing: {
+      heroTitle1: 'स्मार्ट शेती',
+      heroTitle2: 'निर्णय, सोपे करून',
+      heroSubtitle: 'उत्तम उत्पादन आणि निरोगी मातीसाठी शेतकऱ्यांना AI-आधारित अंतर्दृष्टी.',
+      chooseLanguage: 'तुमची भाषा निवडा',
+      ecoSmartTitle: 'ईको-स्मार्ट',
+      ecoSmartDesc: 'शाश्वत जमीन व्यवस्थापनासाठी अनुकूलित AI अंतर्दृष्टी.',
+      accuracy: 'अचूकता',
+      irrigation: 'सिंचन',
+      continue: 'पुढे',
+    },
+    input: {
+      fieldAnalysis: 'शेती विश्लेषण',
+      fieldStatusTitle: 'शेत स्थिती अपडेट',
+      fieldStatusDesc: 'AI-आधारित ऑप्टिमायझेशन रणनीती मिळवण्यासाठी सध्याची माती आणि पिकाची माहिती द्या.',
+      soilMoistureLabel: 'मातीतील ओलावा (%)',
+      soilMoistureSub: 'मोजलेला वॉल्यूमेट्रिक पाणी प्रमाण',
+      dry: 'कोरडी',
+      optimal: 'उत्तम',
+      saturated: 'संतृप्त',
+      cropStageTitle: 'पिकाचा टप्पा',
+      cropStageSub: 'पिकाची सध्याची वाढ अवस्था निवडा',
+      cropTypeTitle: 'पिकाचा प्रकार',
+      cropTypeSub: 'शिफारस पिकानुसार बदलेल',
+      phLabel: 'मातीचा pH',
+      phSub: 'मातीची आम्लता / क्षारता',
+      nutrientN: 'नायट्रोजन (N)',
+      nutrientP: 'फॉस्फरस (P)',
+      nutrientK: 'पोटॅशियम (K)',
+      stageSeedling: 'रोप अवस्था',
+      stageVegetative: 'वनस्पतिजन्य अवस्था',
+      stageFlowering: 'फुलोरा अवस्था',
+      stageHarvest: 'काढणी अवस्था',
+      getRecommendation: 'शिफारस मिळवा',
+      calculating: 'गणना सुरू आहे...',
+      realTimeSatelliteSensor: 'रिअल-टाइम उपग्रह आणि सेन्सर डेटावरून गणना',
+      recommendationFailed: 'शिफारस मिळू शकली नाही. कृपया पुन्हा प्रयत्न करा।',
+      gpsLoading: 'तुमचे GPS स्थान मिळवले जात आहे...',
+      gpsUsing: 'GPS स्थान वापरले जात आहे.',
+      gpsDenied: 'GPS उपलब्ध नाही. कृपया शहर निवडा.',
+      selectCity: 'शहर निवडा',
+    },
+    dashboard: {
+      currentWeather: 'सध्याचे हवामान',
+      humidity: 'आर्द्रता',
+      windSpeed: 'वाऱ्याचा वेग',
+      todaysProtocol: 'आजची प्रक्रिया',
+      smartRecommendations: 'स्मार्ट शिफारसी',
+      actionRequired: 'करावयाची कृती',
+      fertilization: 'खत देणे',
+      analysisRationale: 'विश्लेषणाचे कारण',
+      viewDetailedSoilReport: 'विस्तृत माती अहवाल पहा',
+      progressTitle: 'वाढीचा टप्पा',
+      progressRight: 'पुढचा टप्पा',
+      stageSowing: 'पेरणी',
+      stageVegetative: 'वनस्पतिजन्य',
+      stageFlowering: 'फुलोरा',
+      stageHarvest: 'काढणी',
+      latestMonitoringTitle: 'अलीकडील निरीक्षण',
+      trendsTitle: 'ट्रेंड्स (शेवटच्या 5 रीडिंग)',
+      analyticsTitle: 'वापर विश्लेषण',
+      reasonsTitle: 'स्पष्ट कारणे',
+      protocolIrrigationFallback: 'आज सिंचन करा',
+      protocolFertilizerFallback: '20 किग्रा नायट्रोजन द्या',
+      rationaleFallback:
+        'मातीतील ओलावा कमी आहे आणि तापमान जास्त आहे, त्यामुळे बाष्पीभवनामुळे पाण्याची गळती वाढते. वनस्पतिजन्य अवस्थेसाठी नायट्रोजनची पातळी इष्टतम मर्यादेपेक्षा कमी असू शकते; 24 तासांच्या आत उपाय न केल्यास वाढ खुंटू शकते.',
+      alertMoisture: 'ओलावा',
+      alertN: 'N',
+      alertP: 'P',
+      alertK: 'K',
+      alertStage: 'टप्पा',
+    },
+  },
+};
 
 // --- Components ---
 
-const BottomNav = ({ activeTab, onTabChange }: { activeTab: string, onTabChange: (tab: Screen) => void }) => {
+const BottomNav = ({
+  activeTab,
+  onTabChange,
+  language,
+}: {
+  activeTab: string;
+  onTabChange: (tab: Screen) => void;
+  language: Language;
+}) => {
   const tabs = [
-    { id: 'home', label: 'Home', icon: Home, screen: 'landing' as Screen },
-    { id: 'input', label: 'Input', icon: LayoutGrid, screen: 'input' as Screen },
-    { id: 'analysis', label: 'Analysis', icon: ClipboardList, screen: 'dashboard' as Screen },
-    { id: 'profile', label: 'Profile', icon: User, screen: 'landing' as Screen },
+    { id: 'home', label: COPY[language].nav.home, icon: Home, screen: 'landing' as Screen },
+    { id: 'input', label: COPY[language].nav.input, icon: LayoutGrid, screen: 'input' as Screen },
+    { id: 'analysis', label: COPY[language].nav.analysis, icon: ClipboardList, screen: 'dashboard' as Screen },
+    { id: 'profile', label: COPY[language].nav.profile, icon: User, screen: 'landing' as Screen },
   ];
 
   return (
@@ -62,8 +376,15 @@ const BottomNav = ({ activeTab, onTabChange }: { activeTab: string, onTabChange:
   );
 };
 
-const LandingPage = ({ onNext }: { onNext: () => void }) => {
-  const [selectedLang, setSelectedLang] = useState<Language>('English');
+const LandingPage = ({ 
+  onNext, 
+  initialLang,
+}: { 
+  onNext: (lang: Language) => void;
+  initialLang: Language;
+}) => {
+  const [selectedLang, setSelectedLang] = useState<Language>(initialLang);
+  const c = COPY[selectedLang];
 
   const languages: { name: Language, label: string, sub: string }[] = [
     { name: 'English', label: 'English', sub: 'Primary Global Language' },
@@ -93,10 +414,10 @@ const LandingPage = ({ onNext }: { onNext: () => void }) => {
         <div className="absolute inset-0 bg-gradient-to-t from-[#f9f8f2] via-[#f9f8f2]/90 to-transparent" />
         <div className="absolute bottom-0 left-0 right-0 p-6 flex flex-col gap-2 bg-gradient-to-t from-[#f9f8f2] to-transparent">
           <h2 className="text-3xl font-bold leading-tight text-[#1f4d2b] drop-shadow-sm">
-            Smart Farming<br />Decisions, Simplified
+            {c.landing.heroTitle1}<br />{c.landing.heroTitle2}
           </h2>
           <p className="text-sm text-gray-800 font-semibold leading-relaxed">
-            Empowering farmers with AI-driven insights for better yields and healthier soil.
+            {c.landing.heroSubtitle}
           </p>
         </div>
       </div>
@@ -107,7 +428,7 @@ const LandingPage = ({ onNext }: { onNext: () => void }) => {
           <div className="p-1 bg-[#e6f4ea] rounded-full text-[#1f4d2b]">
             <Languages size={14} />
           </div>
-          <h3 className="text-sm font-bold text-gray-800">Choose Your Language</h3>
+          <h3 className="text-sm font-bold text-gray-800">{c.landing.chooseLanguage}</h3>
         </div>
         <div className="flex flex-col gap-2">
           {languages.map((lang) => (
@@ -139,21 +460,21 @@ const LandingPage = ({ onNext }: { onNext: () => void }) => {
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2 text-[#1f4d2b]">
             <Leaf size={18} fill="currentColor" />
-            <h3 className="font-bold text-sm">Eco-Smart</h3>
+            <h3 className="font-bold text-sm">{c.landing.ecoSmartTitle}</h3>
           </div>
           <p className="text-[10px] text-gray-600 font-medium">
-            AI insights optimized for sustainable land management.
+            {c.landing.ecoSmartDesc}
           </p>
         </div>
         
         <div className="flex gap-3">
           <div className="flex-1 bg-[#d1e7d8] p-3 rounded-xl flex flex-col items-center justify-center gap-1">
             <span className="text-sm font-bold text-[#1f4d2b]">98%</span>
-            <span className="text-[8px] font-bold text-gray-500 uppercase tracking-widest">Accuracy</span>
+            <span className="text-[8px] font-bold text-gray-500 uppercase tracking-widest">{c.landing.accuracy}</span>
           </div>
           <div className="flex-1 bg-[#d1e7d8] p-3 rounded-xl flex flex-col items-center justify-center gap-1">
             <Droplets size={14} className="text-[#1f4d2b]" />
-            <span className="text-[8px] font-bold text-gray-500 uppercase tracking-widest">Irrigation</span>
+            <span className="text-[8px] font-bold text-gray-500 uppercase tracking-widest">{c.landing.irrigation}</span>
           </div>
         </div>
       </div>
@@ -166,19 +487,90 @@ const LandingPage = ({ onNext }: { onNext: () => void }) => {
 
       {/* CTA Button */}
       <button 
-        onClick={onNext}
+        onClick={() => onNext(selectedLang)}
         className="w-full bg-[#1f4d2b] text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform shadow-lg shadow-green-900/20"
       >
-        Continue <ArrowRight size={18} />
+        {c.landing.continue} <ArrowRight size={18} />
       </button>
     </div>
   );
 };
 
-const InputFormPage = ({ onNext }: { onNext: () => void }) => {
+const InputFormPage = ({ 
+  onNext, 
+  onRecommendationReady,
+  language,
+}: { 
+  onNext: () => void;
+  onRecommendationReady: (data: { recommendation: RecommendationData; weather: WeatherSummary }) => void;
+  language: Language;
+}) => {
   const [moisture, setMoisture] = useState(45);
   const [nutrients, setNutrients] = useState({ n: 0, p: 0, k: 0 });
+  const [crop, setCrop] = useState<Crop>('Maize');
+  const [ph, setPh] = useState(6.5);
   const [stage, setStage] = useState<CropStage>('Vegetative');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const c = COPY[language];
+
+  const CITY_COORDS: Record<string, { lat: number; lon: number }> = {
+    Pune: { lat: 18.5204, lon: 73.8567 },
+    Mumbai: { lat: 19.076, lon: 72.8777 },
+    Delhi: { lat: 28.6139, lon: 77.209 },
+    Bengaluru: { lat: 12.9716, lon: 77.5946 },
+    Hyderabad: { lat: 17.385, lon: 78.4867 },
+    Chennai: { lat: 13.0827, lon: 80.2707 },
+    Ahmedabad: { lat: 23.0225, lon: 72.5714 },
+    Jaipur: { lat: 26.9124, lon: 75.7873 },
+    Nagpur: { lat: 21.1458, lon: 79.0882 },
+    Kolkata: { lat: 22.5726, lon: 88.3639 },
+  };
+
+  const [gpsMode, setGpsMode] = useState<'idle' | 'loading' | 'gps' | 'denied'>('idle');
+  const [gpsCoords, setGpsCoords] = useState<{ lat: number; lon: number } | null>(null);
+  const [selectedCity, setSelectedCity] = useState<string>('Pune');
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const geo = navigator.geolocation;
+    if (!geo) {
+      setGpsMode('denied');
+      setGpsCoords(null);
+      return;
+    }
+
+    setGpsMode('loading');
+    geo.getCurrentPosition(
+      (pos) => {
+        if (cancelled) return;
+        setGpsCoords({
+          lat: pos.coords.latitude,
+          lon: pos.coords.longitude,
+        });
+        setGpsMode('gps');
+      },
+      () => {
+        if (cancelled) return;
+        setGpsCoords(null);
+        setGpsMode('denied');
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 8000,
+        maximumAge: 5 * 60 * 1000,
+      },
+    );
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const effectiveLocation = gpsCoords
+    ? { lat: gpsCoords.lat, lon: gpsCoords.lon, name: 'GPS' }
+    : { lat: CITY_COORDS[selectedCity].lat, lon: CITY_COORDS[selectedCity].lon, name: selectedCity };
 
   return (
     <div className="flex flex-col gap-6 pb-24">
@@ -200,10 +592,10 @@ const InputFormPage = ({ onNext }: { onNext: () => void }) => {
       </div>
 
       <div className="flex flex-col gap-1 px-1">
-        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Field Analysis</span>
-        <h2 className="text-2xl font-bold text-gray-900">Field Status Update</h2>
+        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{c.input.fieldAnalysis}</span>
+        <h2 className="text-2xl font-bold text-gray-900">{c.input.fieldStatusTitle}</h2>
         <p className="text-xs text-gray-500 font-medium leading-relaxed">
-          Enter current soil and crop metrics to receive your AI-powered optimization strategy.
+          {c.input.fieldStatusDesc}
         </p>
       </div>
 
@@ -214,8 +606,8 @@ const InputFormPage = ({ onNext }: { onNext: () => void }) => {
             <Droplets size={20} />
           </div>
           <div className="flex flex-col">
-            <span className="text-sm font-bold text-gray-800">Soil Moisture (%)</span>
-            <span className="text-[10px] text-gray-400 font-medium">Current volumetric water content</span>
+            <span className="text-sm font-bold text-gray-800">{c.input.soilMoistureLabel}</span>
+            <span className="text-[10px] text-gray-400 font-medium">{c.input.soilMoistureSub}</span>
           </div>
         </div>
         
@@ -236,19 +628,50 @@ const InputFormPage = ({ onNext }: { onNext: () => void }) => {
             className="w-full h-1.5 bg-gray-100 rounded-lg appearance-none cursor-pointer accent-[#1f4d2b]"
           />
           <div className="flex justify-between text-[8px] font-bold text-gray-400 uppercase tracking-widest">
-            <span>Dry</span>
-            <span className="text-[#1f4d2b]">Optimal</span>
-            <span>Saturated</span>
+            <span>{c.input.dry}</span>
+            <span className="text-[#1f4d2b]">{c.input.optimal}</span>
+            <span>{c.input.saturated}</span>
           </div>
+        </div>
+      </div>
+
+      {/* Soil pH Card */}
+      <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col gap-6">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-[#e6f4ea] rounded-xl text-[#1f4d2b]">
+            <Leaf size={20} />
+          </div>
+          <div className="flex flex-col">
+            <span className="text-sm font-bold text-gray-800">{c.input.phLabel}</span>
+            <span className="text-[10px] text-gray-400 font-medium">{c.input.phSub}</span>
+          </div>
+        </div>
+
+        <div className="flex justify-center">
+          <div className="bg-[#f5f5f0] px-6 py-3 rounded-xl flex items-center gap-2">
+            <span className="text-3xl font-bold text-gray-800">{ph}</span>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-3">
+          <input
+            type="number"
+            value={ph}
+            onChange={(e) => setPh(parseFloat(e.target.value) || 0)}
+            step={0.1}
+            min={3.5}
+            max={9.5}
+            className="w-full bg-[#f5f5f0] p-4 rounded-xl text-sm font-bold text-gray-700 focus:outline-none"
+          />
         </div>
       </div>
 
       {/* Nutrients Section */}
       <div className="flex flex-col gap-3">
         {[
-          { id: 'n', label: 'Nitrogen (N)', value: nutrients.n },
-          { id: 'p', label: 'Phosphorus (P)', value: nutrients.p },
-          { id: 'k', label: 'Potassium (K)', value: nutrients.k },
+          { id: 'n', label: c.input.nutrientN, value: nutrients.n },
+          { id: 'p', label: c.input.nutrientP, value: nutrients.p },
+          { id: 'k', label: c.input.nutrientK, value: nutrients.k },
         ].map((item) => (
           <div key={item.id} className="bg-white p-5 rounded-2xl border border-gray-100 flex flex-col items-center gap-3">
             <div className="flex items-center gap-2 text-gray-400">
@@ -265,6 +688,30 @@ const InputFormPage = ({ onNext }: { onNext: () => void }) => {
         ))}
       </div>
 
+      {/* Crop Type */}
+      <div className="bg-white p-5 rounded-2xl border border-gray-100 flex flex-col gap-4">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-[#1f4d2b] rounded-lg text-white">
+            <Sprout size={18} />
+          </div>
+          <div className="flex flex-col">
+            <span className="text-sm font-bold text-gray-800">{c.input.cropTypeTitle}</span>
+            <span className="text-[10px] text-gray-400 font-medium">{c.input.cropTypeSub}</span>
+          </div>
+        </div>
+
+        <select
+          value={crop}
+          onChange={(e) => setCrop(e.target.value as Crop)}
+          className="w-full bg-[#f5f5f0] p-4 rounded-xl text-sm font-bold text-gray-700 focus:outline-none appearance-none"
+        >
+          <option value="Maize">Maize</option>
+          <option value="Wheat">Wheat</option>
+          <option value="Rice">Rice</option>
+          <option value="Cotton">Cotton</option>
+        </select>
+      </div>
+
       {/* Crop Stage */}
       <div className="bg-white p-5 rounded-2xl border border-gray-100 flex flex-col gap-4">
         <div className="flex items-center gap-3">
@@ -272,8 +719,8 @@ const InputFormPage = ({ onNext }: { onNext: () => void }) => {
             <Sprout size={18} />
           </div>
           <div className="flex flex-col">
-            <span className="text-sm font-bold text-gray-800">Crop Stage</span>
-            <span className="text-[10px] text-gray-400 font-medium">Select the current growth phase</span>
+            <span className="text-sm font-bold text-gray-800">{c.input.cropStageTitle}</span>
+            <span className="text-[10px] text-gray-400 font-medium">{c.input.cropStageSub}</span>
           </div>
         </div>
         <select 
@@ -281,30 +728,206 @@ const InputFormPage = ({ onNext }: { onNext: () => void }) => {
           onChange={(e) => setStage(e.target.value as CropStage)}
           className="w-full bg-[#f5f5f0] p-4 rounded-xl text-sm font-bold text-gray-700 focus:outline-none appearance-none"
         >
-          <option value="Seedling">Seedling</option>
-          <option value="Vegetative">Vegetative</option>
-          <option value="Flowering">Flowering</option>
-          <option value="Harvest">Harvest</option>
+          <option value="Seedling">{c.input.stageSeedling}</option>
+          <option value="Vegetative">{c.input.stageVegetative}</option>
+          <option value="Flowering">{c.input.stageFlowering}</option>
+          <option value="Harvest">{c.input.stageHarvest}</option>
         </select>
       </div>
 
       {/* CTA Button */}
       <div className="flex flex-col gap-3 mt-2">
         <button 
-          onClick={onNext}
-          className="w-full bg-[#1f4d2b] text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform shadow-lg shadow-green-900/20"
+          onClick={async () => {
+            try {
+              setError(null);
+              setLoading(true);
+              const response = await fetch('/api/recommendations', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  moisture,
+                  nutrients,
+                  stage,
+                  crop,
+                  ph,
+                  language,
+                  location: effectiveLocation,
+                }),
+              });
+              if (!response.ok) {
+                throw new Error(c.input.recommendationFailed);
+              }
+              const data = await response.json();
+              const recommendation: RecommendationData = {
+                id: data.id,
+                irrigationText: data.irrigationText,
+                fertilizerText: data.fertilizerText,
+                rationale: data.rationale,
+                progress: data.progress,
+              };
+              const weather: WeatherSummary = data.weather;
+              onRecommendationReady({ recommendation, weather });
+              onNext();
+            } catch (e: any) {
+              setError(e.message || c.input.recommendationFailed);
+            } finally {
+              setLoading(false);
+            }
+          }}
+          disabled={loading}
+          className="w-full bg-[#1f4d2b] text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform shadow-lg shadow-green-900/20 disabled:opacity-60 disabled:cursor-not-allowed"
         >
-          Get Recommendation <Sparkles size={18} />
+          {loading ? c.input.calculating : c.input.getRecommendation} <Sparkles size={18} />
         </button>
+        {error && (
+          <p className="text-[10px] text-center text-red-500 font-medium">
+            {error}
+          </p>
+        )}
+        {gpsMode === 'loading' && (
+          <p className="text-[10px] text-center text-gray-500 font-medium">
+            {c.input.gpsLoading}
+          </p>
+        )}
+        {gpsMode === 'gps' && (
+          <p className="text-[10px] text-center text-gray-500 font-medium">
+            {c.input.gpsUsing}
+          </p>
+        )}
+        {gpsMode === 'denied' && (
+          <div className="flex flex-col gap-2">
+            <p className="text-[10px] text-center text-gray-600 font-medium">
+              {c.input.gpsDenied}
+            </p>
+            <select
+              value={selectedCity}
+              onChange={(e) => setSelectedCity(e.target.value)}
+              className="w-full bg-white p-3 rounded-xl text-xs font-bold text-gray-700 focus:outline-none appearance-none border border-gray-100"
+            >
+              {Object.keys(CITY_COORDS).map((city) => (
+                <option key={city} value={city}>
+                  {city}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         <p className="text-[10px] text-center text-gray-400 font-medium">
-          Calculated using real-time satellite & sensor data
+          {c.input.realTimeSatelliteSensor}
         </p>
       </div>
     </div>
   );
 };
 
-const DashboardPage = () => {
+const DashboardPage = ({
+  recommendation,
+  weather,
+  language,
+  onOpenSoilReport,
+}: {
+  recommendation: RecommendationData | null;
+  weather: WeatherSummary | null;
+  language: Language;
+  onOpenSoilReport: (runId: number) => void;
+}) => {
+  const c = COPY[language];
+  const temperature = weather?.temperature ?? 28;
+  const humidity = weather?.humidity ?? 60;
+  const windSpeed = weather?.windSpeed ?? 10;
+  const condition = weather?.condition ?? 'Field conditions';
+  const protocolIrrigation = recommendation?.irrigationText ?? c.dashboard.protocolIrrigationFallback;
+  const protocolFertilizer = recommendation?.fertilizerText ?? c.dashboard.protocolFertilizerFallback;
+  const rationale = recommendation?.rationale ?? c.dashboard.rationaleFallback;
+  const progress = recommendation?.progress ?? 65;
+
+  const [latestSensor, setLatestSensor] = useState<SensorReading | null>(null);
+  const [history, setHistory] = useState<SensorReading[]>([]);
+  const [analytics, setAnalytics] = useState<AnalyticsSummary | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const load = async () => {
+      try {
+        const [latestRes, historyRes, analyticsRes] = await Promise.all([
+          fetch('/api/sensors/latest'),
+          fetch('/api/sensors/history?limit=5'),
+          fetch('/api/analytics/summary'),
+        ]);
+
+        if (!latestRes.ok || !historyRes.ok || !analyticsRes.ok) return;
+
+        const latestRaw = await latestRes.json();
+        const historyRaw = await historyRes.json();
+        const analyticsRaw = await analyticsRes.json();
+
+        if (cancelled) return;
+
+        if (latestRaw) {
+          setLatestSensor({
+            sensorReadingId: latestRaw.id,
+            createdAt: latestRaw.created_at,
+            crop: latestRaw.crop,
+            stage: latestRaw.stage,
+            moisture: latestRaw.moisture,
+            n: latestRaw.n,
+            p: latestRaw.p,
+            k: latestRaw.k,
+            ph: latestRaw.ph,
+            locationName: latestRaw.location_name,
+            lat: latestRaw.lat,
+            lon: latestRaw.lon,
+          });
+        }
+
+        setHistory(
+          (historyRaw ?? []).map((r: any) => ({
+            sensorReadingId: r.id,
+            createdAt: r.created_at,
+            crop: r.crop,
+            stage: r.stage,
+            moisture: r.moisture,
+            n: r.n,
+            p: r.p,
+            k: r.k,
+            ph: r.ph,
+            locationName: r.location_name,
+            lat: r.lat,
+            lon: r.lon,
+          })),
+        );
+
+        setAnalytics(analyticsRaw as AnalyticsSummary);
+      } catch {
+        // Ignore dashboard load errors for now.
+      }
+    };
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const localizedStageLabel = (stageValue: string) => {
+    switch (stageValue) {
+      case 'Seedling':
+        return c.input.stageSeedling;
+      case 'Vegetative':
+        return c.input.stageVegetative;
+      case 'Flowering':
+        return c.input.stageFlowering;
+      case 'Harvest':
+        return c.input.stageHarvest;
+      default:
+        return stageValue;
+    }
+  };
+
   return (
     <div className="flex flex-col gap-6 pb-24">
       {/* Header */}
@@ -322,12 +945,12 @@ const DashboardPage = () => {
       <div className="flex flex-col gap-4">
         <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex justify-between items-center">
           <div className="flex flex-col gap-1">
-            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Current Weather</span>
+            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{c.dashboard.currentWeather}</span>
             <div className="flex items-baseline gap-1">
-              <span className="text-4xl font-bold text-gray-800">28°</span>
+              <span className="text-4xl font-bold text-gray-800">{temperature}°</span>
               <span className="text-xl font-bold text-gray-400">C</span>
             </div>
-            <span className="text-xs font-bold text-gray-500">Sunny forecast</span>
+            <span className="text-xs font-bold text-gray-500">{condition}</span>
           </div>
           <div className="w-16 h-16 bg-[#e6f4ea] rounded-full flex items-center justify-center text-[#1f4d2b]">
             <CloudSun size={32} />
@@ -337,26 +960,73 @@ const DashboardPage = () => {
         <div className="flex gap-4">
           <div className="flex-1 bg-white p-4 rounded-2xl border border-gray-100 flex flex-col items-center gap-2">
             <Droplets size={18} className="text-blue-400" />
-            <span className="text-sm font-bold text-gray-800">65%</span>
-            <span className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">Humidity</span>
+            <span className="text-sm font-bold text-gray-800">{humidity}%</span>
+            <span className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">{c.dashboard.humidity}</span>
           </div>
           <div className="flex-1 bg-white p-4 rounded-2xl border border-gray-100 flex flex-col items-center gap-2">
             <Wind size={18} className="text-gray-400" />
-            <span className="text-sm font-bold text-gray-800">12 km/h</span>
-            <span className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">Wind Speed</span>
+            <span className="text-sm font-bold text-gray-800">{windSpeed} km/h</span>
+            <span className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">{c.dashboard.windSpeed}</span>
           </div>
+        </div>
+      </div>
+
+      {/* Latest Monitoring */}
+      <div className="flex flex-col gap-4">
+        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">
+          {c.dashboard.latestMonitoringTitle}
+        </span>
+        <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <h3 className="font-bold text-sm text-gray-900">
+              {latestSensor?.crop ?? '--'}
+            </h3>
+            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+              {latestSensor ? localizedStageLabel(latestSensor.stage) : ''}
+            </span>
+          </div>
+
+          <div className="text-xs text-gray-700 font-medium">
+            Moisture: {latestSensor?.moisture ?? '--'}% • {c.input.phLabel}: {latestSensor?.ph?.toFixed(1) ?? '--'} • N: {latestSensor?.n ?? '--'} P: {latestSensor?.p ?? '--'} K: {latestSensor?.k ?? '--'}
+          </div>
+        </div>
+      </div>
+
+      {/* Trends */}
+      <div className="flex flex-col gap-4">
+        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">
+          {c.dashboard.trendsTitle}
+        </span>
+        <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col gap-3">
+          {history.length === 0 ? (
+            <p className="text-xs text-gray-500 font-medium">No history yet.</p>
+          ) : (
+            history.map((r) => (
+              <div key={r.sensorReadingId} className="flex items-center justify-between gap-3">
+                <span className="text-[10px] font-bold text-gray-500">
+                  {r.crop}
+                </span>
+                <span className="text-[10px] font-bold text-gray-800">
+                  {r.moisture}% • pH {r.ph.toFixed(1)}
+                </span>
+                <span className="text-[10px] font-bold text-gray-400">
+                  N {r.n} P {r.p} K {r.k}
+                </span>
+              </div>
+            ))
+          )}
         </div>
       </div>
 
       {/* Today's Protocol */}
       <div className="flex flex-col gap-4">
-        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Today's Protocol</span>
+        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">{c.dashboard.todaysProtocol}</span>
         <div className="bg-[#1f4d2b] p-6 rounded-3xl shadow-lg flex flex-col gap-6">
           <div className="flex items-center gap-3 text-white">
             <div className="p-2 bg-white/10 rounded-xl">
               <Sparkles size={20} />
             </div>
-            <h3 className="font-bold text-sm">Smart Recommendations</h3>
+            <h3 className="font-bold text-sm">{c.dashboard.smartRecommendations}</h3>
           </div>
           
           <div className="flex flex-col gap-4">
@@ -365,8 +1035,8 @@ const DashboardPage = () => {
                 <Droplets size={16} />
               </div>
               <div className="flex flex-col">
-                <span className="text-[8px] font-bold opacity-60 uppercase tracking-widest">Action Required</span>
-                <span className="text-sm font-bold">Irrigate today</span>
+                <span className="text-[8px] font-bold opacity-60 uppercase tracking-widest">{c.dashboard.actionRequired}</span>
+                <span className="text-sm font-bold">{protocolIrrigation}</span>
               </div>
             </div>
 
@@ -375,8 +1045,8 @@ const DashboardPage = () => {
                 <Sprout size={16} />
               </div>
               <div className="flex flex-col">
-                <span className="text-[8px] font-bold opacity-60 uppercase tracking-widest">Fertilization</span>
-                <span className="text-sm font-bold">Apply 20kg Nitrogen</span>
+                <span className="text-[8px] font-bold opacity-60 uppercase tracking-widest">{c.dashboard.fertilization}</span>
+                <span className="text-sm font-bold">{protocolFertilizer}</span>
               </div>
             </div>
           </div>
@@ -387,32 +1057,259 @@ const DashboardPage = () => {
       <div className="bg-[#f5f5f0] p-6 rounded-3xl flex flex-col gap-4 border border-gray-100">
         <div className="flex items-center gap-2 text-gray-800">
           <Info size={18} />
-          <h3 className="font-bold text-sm">Analysis Rationale</h3>
+          <h3 className="font-bold text-sm">{c.dashboard.analysisRationale}</h3>
         </div>
+        {recommendation?.reasons?.length ? (
+          <div className="flex flex-col gap-2">
+            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">
+              {c.dashboard.reasonsTitle}
+            </span>
+            <ul className="list-disc pl-4 text-xs text-gray-600 font-medium">
+              {recommendation.reasons.map((r, idx) => (
+                <li key={`${idx}-${r}`} className="mt-1">
+                  {r}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         <p className="text-xs text-gray-600 font-medium leading-relaxed">
-          Soil moisture is <span className="text-orange-600 font-bold">low</span> and temperature is <span className="text-orange-600 font-bold">high</span>, which increases water loss through evapotranspiration.<br /><br />
-          Nitrogen levels are currently <span className="text-orange-600 font-bold">below the optimal threshold</span> for the vegetative stage, risking stunted growth if not addressed within 24 hours.
+          {rationale}
         </p>
-        <button className="w-full bg-white py-3 rounded-xl text-xs font-bold text-gray-800 flex items-center justify-center gap-2 shadow-sm border border-gray-100">
-          View Detailed Soil Report <ArrowRight size={14} />
+        <button
+          className="w-full bg-white py-3 rounded-xl text-xs font-bold text-gray-800 flex items-center justify-center gap-2 shadow-sm border border-gray-100"
+          onClick={() => {
+            if (!recommendation) return;
+            onOpenSoilReport(recommendation.id);
+          }}
+          disabled={!recommendation}
+        >
+          {c.dashboard.viewDetailedSoilReport} <ArrowRight size={14} />
         </button>
+      </div>
+
+      {/* Usage Analytics */}
+      <div className="bg-white p-6 rounded-3xl flex flex-col gap-4 border border-gray-100">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-gray-800">
+            <Sparkles size={18} />
+            <h3 className="font-bold text-sm">{c.dashboard.analyticsTitle}</h3>
+          </div>
+          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+            {analytics ? `${analytics.runsCount} runs` : ''}
+          </span>
+        </div>
+        <div className="text-xs text-gray-700 font-medium">
+          Total irrigation: {analytics?.totalIrrigationMm ?? '--'} mm • Total Fertilizer N: {analytics?.totalFertilizerNKg ?? '--'} kg • P: {analytics?.totalFertilizerPKg ?? '--'} kg • K: {analytics?.totalFertilizerKKg ?? '--'} kg
+        </div>
       </div>
 
       {/* Progress Section */}
       <div className="flex flex-col gap-4 px-1 pb-4">
         <div className="flex justify-between items-end">
-          <span className="text-xs font-bold text-gray-800">Maize Growth Stage</span>
-          <span className="text-xs font-bold text-gray-800">V6 Stage</span>
+          <span className="text-xs font-bold text-gray-800">
+            {(latestSensor?.crop ?? 'Crop') + ' ' + c.dashboard.progressTitle}
+          </span>
+          <span className="text-xs font-bold text-gray-800">
+            {recommendation?.nextStage ? `${c.dashboard.progressRight}: ${localizedStageLabel(recommendation.nextStage)}` : c.dashboard.progressRight}
+          </span>
         </div>
         <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
-          <div className="h-full bg-[#1f4d2b] rounded-full" style={{ width: '65%' }} />
+          <div className="h-full bg-[#1f4d2b] rounded-full" style={{ width: `${progress}%` }} />
         </div>
         <div className="flex justify-between text-[8px] font-bold text-gray-400 uppercase tracking-widest">
-          <span>Sowing</span>
-          <span>Vegetative</span>
-          <span>Flowering</span>
-          <span>Harvest</span>
+          <span>{c.dashboard.stageSowing}</span>
+          <span>{c.dashboard.stageVegetative}</span>
+          <span>{c.dashboard.stageFlowering}</span>
+          <span>{c.dashboard.stageHarvest}</span>
         </div>
+      </div>
+    </div>
+  );
+};
+
+const SoilReportPage = ({
+  runId,
+  language,
+  onBack,
+}: {
+  runId: number;
+  language: Language;
+  onBack: () => void;
+}) => {
+  const c = COPY[language];
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [report, setReport] = useState<SoilReportResponse | null>(null);
+
+  const stageLabel = (stageValue: string) => {
+    switch (stageValue) {
+      case 'Seedling':
+        return c.input.stageSeedling;
+      case 'Vegetative':
+        return c.input.stageVegetative;
+      case 'Flowering':
+        return c.input.stageFlowering;
+      case 'Harvest':
+        return c.input.stageHarvest;
+      default:
+        return stageValue;
+    }
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const res = await fetch(`/api/soil-report/${runId}`);
+        if (!res.ok) throw new Error('Failed to load report');
+        const data = (await res.json()) as SoilReportResponse;
+        if (cancelled) return;
+        setReport(data);
+      } catch (e: any) {
+        if (cancelled) return;
+        setError(e?.message ?? 'Failed to load report');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [runId]);
+
+  if (loading) {
+    return (
+      <div className="flex flex-col gap-6 pb-24">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onBack}
+            className="w-10 h-10 bg-white border border-gray-100 rounded-xl shadow-sm"
+          >
+            {'<'}
+          </button>
+          <h1 className="text-lg font-bold text-[#1f4d2b]">Soil Report</h1>
+        </div>
+        <p className="text-xs text-gray-500 font-medium">Loading...</p>
+      </div>
+    );
+  }
+
+  if (error || !report) {
+    return (
+      <div className="flex flex-col gap-6 pb-24">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onBack}
+            className="w-10 h-10 bg-white border border-gray-100 rounded-xl shadow-sm"
+          >
+            {'<'}
+          </button>
+          <h1 className="text-lg font-bold text-[#1f4d2b]">Soil Report</h1>
+        </div>
+        <p className="text-xs text-red-500 font-medium">{error ?? 'Failed to load report'}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-6 pb-24">
+      {/* Header */}
+      <div className="flex items-center justify-between px-1">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onBack}
+            className="w-10 h-10 bg-white border border-gray-100 rounded-xl shadow-sm text-gray-800 font-bold"
+          >
+            {'<'}
+          </button>
+          <h1 className="text-lg font-bold text-[#1f4d2b]">{c.dashboard.viewDetailedSoilReport}</h1>
+        </div>
+      </div>
+
+      {/* Sensor snapshot */}
+      <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col gap-4">
+        <div className="flex items-center gap-2 text-gray-800">
+          <Info size={18} />
+          <h3 className="font-bold text-sm">Soil Snapshot</h3>
+        </div>
+        <div className="text-xs text-gray-700 font-medium leading-relaxed">
+          <div>
+            Crop: {report.sensor.crop} • Stage: {stageLabel(report.sensor.stage)}
+          </div>
+          <div>
+            Moisture: {report.sensor.moisture}% • {c.input.phLabel}: {report.sensor.ph.toFixed(1)}
+          </div>
+          <div>
+            N: {report.sensor.n} • P: {report.sensor.p} • K: {report.sensor.k}
+          </div>
+          <div>
+            Location: {report.sensor.locationName ?? '—'}{report.sensor.lat != null && report.sensor.lon != null ? ` (${report.sensor.lat.toFixed(3)}, ${report.sensor.lon.toFixed(3)})` : ''}
+          </div>
+        </div>
+      </div>
+
+      {/* Recommendation */}
+      <div className="bg-[#f5f5f0] p-6 rounded-3xl flex flex-col gap-4 border border-gray-100">
+        <div className="flex items-center gap-2 text-gray-800">
+          <Sparkles size={18} />
+          <h3 className="font-bold text-sm">Recommendation Details</h3>
+        </div>
+
+        <div className="text-xs text-gray-700 font-medium leading-relaxed">
+          <div>
+            Irrigation: {report.recommendation.irrigationWhen ?? '—'} • {report.recommendation.irrigationMm ?? 0} mm
+          </div>
+          <div>
+            Fertilizer (kg/acre): N {report.recommendation.fertilizerNKg ?? 0}, P {report.recommendation.fertilizerPKg ?? 0}, K {report.recommendation.fertilizerKKg ?? 0}
+          </div>
+          <div>
+            Next stage: {report.recommendation.nextStage ? stageLabel(report.recommendation.nextStage) : '—'}
+          </div>
+        </div>
+
+        {report.recommendation.reasons?.length ? (
+          <div className="flex flex-col gap-2">
+            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">
+              {c.dashboard.reasonsTitle}
+            </span>
+            <ul className="list-disc pl-4 text-xs text-gray-600 font-medium">
+              {report.recommendation.reasons.map((r, idx) => (
+                <li key={`${idx}-${r}`} className="mt-1">
+                  {r}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
+        <p className="text-xs text-gray-600 font-medium leading-relaxed">
+          {report.recommendation.rationale ?? ''}
+        </p>
+      </div>
+
+      {/* Weather snapshot */}
+      <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col gap-4">
+        <div className="flex items-center gap-2 text-gray-800">
+          <CloudSun size={18} />
+          <h3 className="font-bold text-sm">Weather Snapshot</h3>
+        </div>
+        {report.weather ? (
+          <div className="text-xs text-gray-700 font-medium leading-relaxed">
+            <div>
+              Temperature: {report.weather.temperature}°C • {report.weather.condition}
+            </div>
+            <div>
+              Humidity: {report.weather.humidity}% • Wind: {report.weather.windSpeed} km/h
+            </div>
+            <div>{report.weather.forecastSummary}</div>
+          </div>
+        ) : (
+          <p className="text-xs text-gray-500 font-medium">Weather unavailable.</p>
+        )}
       </div>
     </div>
   );
@@ -422,24 +1319,81 @@ const DashboardPage = () => {
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<Screen>('landing');
+  const [recommendation, setRecommendation] = useState<RecommendationData | null>(null);
+  const [weather, setWeather] = useState<WeatherSummary | null>(null);
+  const [language, setLanguage] = useState<Language>('English');
+  const [soilReportId, setSoilReportId] = useState<number | null>(null);
 
   const renderScreen = () => {
     switch (currentScreen) {
       case 'landing':
-        return <LandingPage onNext={() => setCurrentScreen('input')} />;
+        return (
+          <LandingPage
+            initialLang={language}
+            onNext={(lang) => {
+              setLanguage(lang);
+              setCurrentScreen('input');
+            }}
+          />
+        );
       case 'input':
-        return <InputFormPage onNext={() => setCurrentScreen('dashboard')} />;
+        return (
+          <InputFormPage
+            onNext={() => setCurrentScreen('dashboard')}
+            onRecommendationReady={({ recommendation, weather }) => {
+              setRecommendation(recommendation);
+              setWeather(weather);
+            }}
+            language={language}
+          />
+        );
       case 'dashboard':
-        return <DashboardPage />;
+        return (
+          <DashboardPage
+            recommendation={recommendation}
+            weather={weather}
+            language={language}
+            onOpenSoilReport={(id) => {
+              setSoilReportId(id);
+              setCurrentScreen('report');
+            }}
+          />
+        );
+      case 'report':
+        return soilReportId ? (
+          <SoilReportPage
+            runId={soilReportId}
+            language={language}
+            onBack={() => setCurrentScreen('dashboard')}
+          />
+        ) : (
+          <DashboardPage
+            recommendation={recommendation}
+            weather={weather}
+            language={language}
+            onOpenSoilReport={(id) => {
+              setSoilReportId(id);
+              setCurrentScreen('report');
+            }}
+          />
+        );
       default:
-        return <LandingPage onNext={() => setCurrentScreen('input')} />;
+        return (
+          <LandingPage
+            initialLang={language}
+            onNext={(lang) => {
+              setLanguage(lang);
+              setCurrentScreen('input');
+            }}
+          />
+        );
     }
   };
 
   const getActiveTab = () => {
     if (currentScreen === 'landing') return 'home';
     if (currentScreen === 'input') return 'input';
-    if (currentScreen === 'dashboard') return 'analysis';
+    if (currentScreen === 'dashboard' || currentScreen === 'report') return 'analysis';
     return 'home';
   };
 
@@ -463,6 +1417,7 @@ export default function App() {
         <BottomNav 
           activeTab={getActiveTab()} 
           onTabChange={(screen) => setCurrentScreen(screen)} 
+          language={language}
         />
       </div>
     </div>
