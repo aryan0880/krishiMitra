@@ -176,22 +176,28 @@ const COPY: Record<Language, any> = {
       protocolFertilizerFallback: 'Apply 20kg Nitrogen',
       rationaleFallback:
         'Soil moisture is low and temperature is high, which increases water loss through evapotranspiration. Nitrogen levels may be below the optimal threshold for the vegetative stage, risking stunted growth if not addressed within 24 hours.',
-      alertMoisture: 'Moisture',
-      alertN: 'N',
-      alertP: 'P',
-      alertK: 'K',
       alertStage: 'Stage',
     },
     signup: {
-      title: 'One-Time Signup',
-      subtitle: 'Help us personalize your experience.',
-      nameLabel: 'Name',
+      title: 'Get Started',
+      subtitle: 'Tell us a bit about your farm',
+      nameLabel: 'Farmer Name',
       namePlaceholder: 'e.g. Rahul Patil',
-      locationLabel: 'Location',
+      locationLabel: 'Village/City',
       locationPlaceholder: 'e.g. Pune, MH',
-      cropLabel: 'Default Crop',
+      cropLabel: 'Primary Crop',
       selectCrop: 'Select Crop',
-      continue: 'Continue',
+      continue: 'Create Profile',
+    },
+    profile: {
+      title: 'Farmer Profile',
+      subtitle: 'Your agricultural identity',
+      logout: 'Logout',
+      edit: 'Edit Profile',
+      stats: 'Farm Stats',
+      memberSince: 'Member Since',
+      location: 'Location',
+      preferredCrop: 'Preferred Crop',
     },
   },
   Hindi: {
@@ -262,22 +268,28 @@ const COPY: Record<Language, any> = {
       protocolFertilizerFallback: '20 किग्रा नाइट्रोजन डालें',
       rationaleFallback:
         'मिट्टी की नमी कम है और तापमान अधिक है, जिससे बाष्पोत्सर्जन के कारण पानी की हानि बढ़ती है। नाइट्रोजन स्तर वनस्पतिक अवस्था के लिए इष्टतम सीमा से कम हो सकते हैं, जिससे 24 घंटों के भीतर ध्यान न देने पर वृद्धि रुक सकती है।',
-      alertMoisture: 'नमी',
-      alertN: 'N',
-      alertP: 'P',
-      alertK: 'K',
       alertStage: 'चरण',
     },
     signup: {
-      title: 'एक-बार साइनअप',
-      subtitle: 'अपने अनुभव को बेहतर बनाने में हमारी मदद करें।',
-      nameLabel: 'नाम',
+      title: 'शुरुआत करें',
+      subtitle: 'हमें अपने खेत के बारे में थोड़ा बताएं',
+      nameLabel: 'किसान का नाम',
       namePlaceholder: 'जैसे राहुल पाटिल',
-      locationLabel: 'स्थान',
+      locationLabel: 'गाँव/शहर',
       locationPlaceholder: 'जैसे पुणे, महाराष्ट्र',
-      cropLabel: 'डिफ़ॉल्ट फसल',
+      cropLabel: 'मुख्य फसल',
       selectCrop: 'फसल चुनें',
-      continue: 'जारी रखें',
+      continue: 'प्रोफ़ाइल बनाएं',
+    },
+    profile: {
+      title: 'किसान प्रोफ़ाइल',
+      subtitle: 'आपकी कृषि पहचान',
+      logout: 'लॉगआउट',
+      edit: 'प्रोफ़ाइल बदलें',
+      stats: 'खेत के आँकड़े',
+      memberSince: 'सदस्यता की तिथि',
+      location: 'स्थान',
+      preferredCrop: 'पसंदीदा फसल',
     },
   },
   Marathi: {
@@ -348,22 +360,28 @@ const COPY: Record<Language, any> = {
       protocolFertilizerFallback: '20 किग्रा नायट्रोजन द्या',
       rationaleFallback:
         'मातीतील ओलावा कमी आहे आणि तापमान जास्त आहे, त्यामुळे बाष्पीभवनामुळे पाण्याची गळती वाढते. वनस्पतिजन्य अवस्थेसाठी नायट्रोजनची पातळी इष्टतम मर्यादेपेक्षा कमी असू शकते; 24 तासांच्या आत उपाय न केल्यास वाढ खुंटू शकते.',
-      alertMoisture: 'ओलावा',
-      alertN: 'N',
-      alertP: 'P',
-      alertK: 'K',
       alertStage: 'टप्पा',
     },
     signup: {
-      title: 'एक-वेळ साइनअप',
-      subtitle: 'तुमचा अनुभव सुधारण्यासाठी आम्हाला मदत करा।',
-      nameLabel: 'नाव',
+      title: 'सुरुवात करूया',
+      subtitle: 'तुमच्या शेतीबद्दल थोडे सांगा',
+      nameLabel: 'शेतकऱ्याचे नाव',
       namePlaceholder: 'उदा. राहुल पाटील',
-      locationLabel: 'पत्ता',
+      locationLabel: 'गाव/शहर',
       locationPlaceholder: 'उदा. पुणे, महाराष्ट्र',
-      cropLabel: 'डिफ़ॉल्ट पीक',
+      cropLabel: 'मुख्य पीक',
       selectCrop: 'पीक निवडा',
-      continue: 'पुढे जा',
+      continue: 'प्रोफाईल तयार करा',
+    },
+    profile: {
+      title: 'शेतकरी प्रोफाईल',
+      subtitle: 'तुमची कृषी ओळख',
+      logout: 'लॉगआउट',
+      edit: 'प्रोफाईल संपादित करा',
+      stats: 'शेतीची आकडेवारी',
+      memberSince: 'सभासदत्व तारीख',
+      location: 'ठिकाण',
+      preferredCrop: 'आवडते पीक',
     },
   },
 };
@@ -383,7 +401,7 @@ const BottomNav = ({
     { id: 'home', label: COPY[language].nav.home, icon: Home, screen: 'landing' as Screen },
     { id: 'input', label: COPY[language].nav.input, icon: LayoutGrid, screen: 'input' as Screen },
     { id: 'analysis', label: COPY[language].nav.analysis, icon: ClipboardList, screen: 'dashboard' as Screen },
-    { id: 'profile', label: COPY[language].nav.profile, icon: User, screen: 'landing' as Screen },
+    { id: 'profile', label: COPY[language].nav.profile, icon: User, screen: 'profile' as Screen },
   ];
 
   return (
@@ -1420,6 +1438,75 @@ const SoilReportPage = ({
   );
 };
 
+const ProfilePage = ({
+  user,
+  language,
+  onLogout,
+}: {
+  user: { name: string; location: string; crop: string } | null;
+  language: Language;
+  onLogout: () => void;
+}) => {
+  const c = COPY[language].profile;
+  if (!user) return null;
+
+  return (
+    <div className="flex flex-col gap-6 pb-24">
+      {/* Profile Header Card */}
+      <div className="relative overflow-hidden bg-[#1f4d2b] rounded-[2.5rem] p-8 text-white shadow-xl">
+        <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-16 -mt-16 blur-2xl" />
+        <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/5 rounded-full -ml-12 -mb-12 blur-xl" />
+        
+        <div className="flex flex-col items-center gap-4 relative z-10">
+          <div className="w-24 h-24 bg-white/10 rounded-full flex items-center justify-center border-2 border-white/20 shadow-inner">
+            <User size={48} className="text-white/80" />
+          </div>
+          <div className="text-center">
+            <h2 className="text-2xl font-bold tracking-tight">{user.name}</h2>
+            <p className="text-white/60 text-xs font-medium uppercase tracking-[0.2em] mt-1">{c.subtitle}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Info Cards */}
+      <div className="grid grid-cols-1 gap-4">
+        <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex items-center gap-4">
+          <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl">
+            <CloudSun size={24} />
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{c.location}</span>
+            <span className="text-sm font-bold text-gray-800">{user.location}</span>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex items-center gap-4">
+          <div className="p-3 bg-green-50 text-green-600 rounded-2xl">
+            <Sprout size={24} />
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{c.preferredCrop}</span>
+            <span className="text-sm font-bold text-gray-800">{user.crop}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Action Buttons */}
+      <div className="flex flex-col gap-3">
+        <button className="w-full bg-[#f5f5f0] text-gray-800 py-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-gray-200 transition-colors">
+          <Sparkles size={18} /> {c.edit}
+        </button>
+        <button 
+          onClick={onLogout}
+          className="w-full bg-red-50 text-red-600 py-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-red-100 transition-colors"
+        >
+          <Info size={18} /> {c.logout}
+        </button>
+      </div>
+    </div>
+  );
+};
+
 // --- Main App ---
 
 export default function App() {
@@ -1507,6 +1594,18 @@ export default function App() {
             onOpenSoilReport={(id) => {
               setSoilReportId(id);
               setCurrentScreen('report');
+            }}
+          />
+        );
+      case 'profile':
+        return (
+          <ProfilePage
+            user={user}
+            language={language}
+            onLogout={() => {
+              localStorage.removeItem('user');
+              setUser(null);
+              setCurrentScreen('landing');
             }}
           />
         );
