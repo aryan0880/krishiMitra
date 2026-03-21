@@ -22,7 +22,7 @@ const DEFAULT_USER_ID = 1;
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'dist')));
 
-const PORT = Number(process.env.BACKEND_PORT || 4000);
+const PORT = Number(process.env.PORT || process.env.BACKEND_PORT || 4000);
 
 type Stage = 'Seedling' | 'Vegetative' | 'Flowering' | 'Harvest';
 type UiLanguage = 'English' | 'Hindi' | 'Marathi';
