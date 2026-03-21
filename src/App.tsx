@@ -25,7 +25,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 
 // --- Types ---
-type Screen = 'landing' | 'input' | 'dashboard' | 'report';
+type Screen = 'landing' | 'signup' | 'input' | 'dashboard' | 'report';
 type Language = 'English' | 'Hindi' | 'Marathi';
 type CropStage = 'Seedling' | 'Vegetative' | 'Flowering' | 'Harvest';
 type Crop = 'Maize' | 'Wheat' | 'Rice' | 'Cotton';
@@ -182,6 +182,17 @@ const COPY: Record<Language, any> = {
       alertK: 'K',
       alertStage: 'Stage',
     },
+    signup: {
+      title: 'One-Time Signup',
+      subtitle: 'Help us personalize your experience.',
+      nameLabel: 'Name',
+      namePlaceholder: 'e.g. Rahul Patil',
+      locationLabel: 'Location',
+      locationPlaceholder: 'e.g. Pune, MH',
+      cropLabel: 'Default Crop',
+      selectCrop: 'Select Crop',
+      continue: 'Continue',
+    },
   },
   Hindi: {
     nav: { home: 'होम', input: 'इनपुट', analysis: 'विश्लेषण', profile: 'प्रोफाइल' },
@@ -256,6 +267,17 @@ const COPY: Record<Language, any> = {
       alertP: 'P',
       alertK: 'K',
       alertStage: 'चरण',
+    },
+    signup: {
+      title: 'एक-बार साइनअप',
+      subtitle: 'अपने अनुभव को बेहतर बनाने में हमारी मदद करें।',
+      nameLabel: 'नाम',
+      namePlaceholder: 'जैसे राहुल पाटिल',
+      locationLabel: 'स्थान',
+      locationPlaceholder: 'जैसे पुणे, महाराष्ट्र',
+      cropLabel: 'डिफ़ॉल्ट फसल',
+      selectCrop: 'फसल चुनें',
+      continue: 'जारी रखें',
     },
   },
   Marathi: {
@@ -332,6 +354,17 @@ const COPY: Record<Language, any> = {
       alertK: 'K',
       alertStage: 'टप्पा',
     },
+    signup: {
+      title: 'एक-वेळ साइनअप',
+      subtitle: 'तुमचा अनुभव सुधारण्यासाठी आम्हाला मदत करा।',
+      nameLabel: 'नाव',
+      namePlaceholder: 'उदा. राहुल पाटील',
+      locationLabel: 'पत्ता',
+      locationPlaceholder: 'उदा. पुणे, महाराष्ट्र',
+      cropLabel: 'डिफ़ॉल्ट पीक',
+      selectCrop: 'पीक निवडा',
+      continue: 'पुढे जा',
+    },
   },
 };
 
@@ -372,6 +405,78 @@ const BottomNav = ({
           );
         })}
       </div>
+    </div>
+  );
+};
+
+const SignupPage = ({
+  onSuccess,
+  language,
+}: {
+  onSuccess: (user: { name: string; location: string; crop: string }) => void;
+  language: Language;
+}) => {
+  const [name, setName] = useState('');
+  const [location, setLocation] = useState('');
+  const [crop, setCrop] = useState<Crop>('Maize');
+  const c = COPY[language].signup;
+
+  return (
+    <div className="flex flex-col gap-8 pb-24">
+      <div className="flex flex-col gap-1 px-1">
+        <h2 className="text-2xl font-bold text-gray-900">{c.title}</h2>
+        <p className="text-sm text-gray-500 font-medium">{c.subtitle}</p>
+      </div>
+
+      <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col gap-6">
+        <div className="flex flex-col gap-2">
+          <label className="text-xs font-bold text-gray-400 uppercase tracking-widest ml-1">{c.nameLabel}</label>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="w-full bg-[#f5f5f0] p-4 rounded-2xl text-sm font-bold text-gray-700 focus:outline-none"
+            placeholder={c.namePlaceholder}
+          />
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <label className="text-xs font-bold text-gray-400 uppercase tracking-widest ml-1">{c.locationLabel}</label>
+          <input
+            type="text"
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            className="w-full bg-[#f5f5f0] p-4 rounded-2xl text-sm font-bold text-gray-700 focus:outline-none"
+            placeholder={c.locationPlaceholder}
+          />
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <label className="text-xs font-bold text-gray-400 uppercase tracking-widest ml-1">{c.cropLabel}</label>
+          <select
+            value={crop}
+            onChange={(e) => setCrop(e.target.value as Crop)}
+            className="w-full bg-[#f5f5f0] p-4 rounded-2xl text-sm font-bold text-gray-700 focus:outline-none appearance-none"
+          >
+            <option value="Maize">Maize</option>
+            <option value="Wheat">Wheat</option>
+            <option value="Rice">Rice</option>
+            <option value="Cotton">Cotton</option>
+          </select>
+        </div>
+      </div>
+
+      <button
+        onClick={() => {
+          if (name && location) {
+            onSuccess({ name, location, crop });
+          }
+        }}
+        disabled={!name || !location}
+        className="w-full bg-[#1f4d2b] text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-all shadow-lg shadow-green-900/10 disabled:opacity-50"
+      >
+        {c.continue} <ArrowRight size={20} />
+      </button>
     </div>
   );
 };
@@ -1319,10 +1424,22 @@ const SoilReportPage = ({
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<Screen>('landing');
+  const [user, setUser] = useState<{ name: string; location: string; crop: string } | null>(null);
   const [recommendation, setRecommendation] = useState<RecommendationData | null>(null);
   const [weather, setWeather] = useState<WeatherSummary | null>(null);
-  const [language, setLanguage] = useState<Language>('English');
+  const [language, setLanguage] = useState<Language>((localStorage.getItem('lang') as Language) || 'English');
   const [soilReportId, setSoilReportId] = useState<number | null>(null);
+
+  useEffect(() => {
+    const savedUser = localStorage.getItem('user');
+    if (savedUser) {
+      try {
+        setUser(JSON.parse(savedUser));
+      } catch {
+        localStorage.removeItem('user');
+      }
+    }
+  }, []);
 
   const renderScreen = () => {
     switch (currentScreen) {
@@ -1332,6 +1449,22 @@ export default function App() {
             initialLang={language}
             onNext={(lang) => {
               setLanguage(lang);
+              localStorage.setItem('lang', lang);
+              if (user) {
+                setCurrentScreen('input');
+              } else {
+                setCurrentScreen('signup');
+              }
+            }}
+          />
+        );
+      case 'signup':
+        return (
+          <SignupPage
+            language={language}
+            onSuccess={(u) => {
+              setUser(u);
+              localStorage.setItem('user', JSON.stringify(u));
               setCurrentScreen('input');
             }}
           />
