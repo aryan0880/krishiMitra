@@ -1,5 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { getRecommendationById, saveRecommendation } from './db';
 import {
   getAnalyticsSummary,
@@ -12,8 +14,13 @@ import {
 } from './db';
 
 const app = express();
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Hardcoded for now until auth is restored/added
+const DEFAULT_USER_ID = 1;
 
 app.use(express.json());
+app.use(express.static(path.join(__dirname, '..', 'dist')));
 
 const PORT = Number(process.env.BACKEND_PORT || 4000);
 
@@ -482,6 +489,7 @@ app.post('/api/recommendations', async (req, res) => {
   }
 
   const sensorReadingId = await saveSensorReading({
+    userId: DEFAULT_USER_ID,
     crop: body.crop,
     stage: body.stage,
     moisture: body.moisture,
@@ -507,6 +515,7 @@ app.post('/api/recommendations', async (req, res) => {
   const nextStage = derived.nextStage;
 
   const runId = await saveRecommendationRun({
+    userId: DEFAULT_USER_ID,
     sensorReadingId,
     crop: body.crop,
     stage: body.stage,
@@ -547,7 +556,7 @@ app.get('/api/soil-report/:id', async (req, res) => {
     return res.status(400).json({ error: 'Invalid id' });
   }
 
-  const report = await getSoilReportByRunId(id).catch(() => null);
+  const report = await getSoilReportByRunId(DEFAULT_USER_ID, id).catch(() => null);
   if (!report) {
     return res.status(404).json({ error: 'Not found' });
   }
@@ -603,20 +612,25 @@ app.get('/api/soil-report/:id', async (req, res) => {
 });
 
 app.get('/api/sensors/latest', async (_req, res) => {
-  const row = await getLatestSensorReading();
+  const row = await getLatestSensorReading(DEFAULT_USER_ID);
   if (!row) return res.json(null);
   res.json(row);
 });
 
 app.get('/api/sensors/history', async (req, res) => {
   const limit = Number(req.query.limit || 5);
-  const rows = await getSensorHistory(Number.isFinite(limit) ? limit : 5);
+  const rows = await getSensorHistory(DEFAULT_USER_ID, Number.isFinite(limit) ? limit : 5);
   res.json(rows);
 });
 
 app.get('/api/analytics/summary', async (_req, res) => {
-  const summary = await getAnalyticsSummary();
+  const summary = await getAnalyticsSummary(DEFAULT_USER_ID);
   res.json(summary);
+});
+
+app.get('*', (req, res) => {
+  if (req.path.startsWith('/api')) return;
+  res.sendFile(path.join(__dirname, '..', 'dist', 'index.html'));
 });
 
 app.listen(PORT, () => {
