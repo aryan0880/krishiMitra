@@ -151,6 +151,20 @@ const COPY: Record<Language, any> = {
       gpsUsing: 'Using GPS location.',
       gpsDenied: 'GPS not available. Please select a city.',
       selectCity: 'Select city',
+      hasSoilCard: 'Do you have a Soil Health Card?',
+      soilCardDesc: 'Your card contains precise soil nutrient data. Having it means we can give more accurate recommendations.',
+      soilCardTitle: 'Soil Health Card',
+      soilCardSub: 'Issued by government / Krishi Kendra. Contains NPK, pH and more.',
+      yesSoilCard: 'Yes, I have it',
+      noSoilCard: "No, I don't have one",
+      soilTypeLabel: 'Soil Type',
+      soilTypeSub: 'Approximate values will be used',
+      soilTypeDesc: 'Select your soil type and we will estimate the soil parameters for you.',
+      soilTypeClay: 'Clay',
+      soilTypeSandy: 'Sandy',
+      soilTypeLoamy: 'Loamy',
+      lastFertilizerLabel: 'Last Fertilizer Used',
+      lastFertilizerPlaceholder: 'e.g. Urea, DAP',
     },
     dashboard: {
       currentWeather: 'Current Weather',
@@ -243,6 +257,20 @@ const COPY: Record<Language, any> = {
       gpsUsing: 'GPS स्थान उपयोग किया जा रहा है।',
       gpsDenied: 'GPS उपलब्ध नहीं है। कृपया शहर चुनें।',
       selectCity: 'शहर चुनें',
+      hasSoilCard: 'क्या आपके पास मृदा स्वास्थ्य कार्ड है?',
+      soilCardDesc: 'आपके कार्ड में सटीक मिट्टी पोषक डेटा है। इससे हम अधिक सटीक सिफारिशें दे सकते हैं।',
+      soilCardTitle: 'मृदा स्वास्थ्य कार्ड',
+      soilCardSub: 'सरकार / कृषि केंद्र द्वारा जारी। NPK, pH और अधिक जानकारी शामिल।',
+      yesSoilCard: 'हाँ, मेरे पास है',
+      noSoilCard: 'नहीं, मेरे पास नहीं है',
+      soilTypeLabel: 'मिट्टी का प्रकार',
+      soilTypeSub: 'अनुमानित मान उपयोग किए जाएंगे',
+      soilTypeDesc: 'अपनी मिट्टी का प्रकार चुनें और हम आपके लिए मिट्टी के मापदंड अनुमानित करेंगे।',
+      soilTypeClay: 'चिकनी मिट्टी',
+      soilTypeSandy: 'रेतीली मिट्टी',
+      soilTypeLoamy: 'दोमट मिट्टी',
+      lastFertilizerLabel: 'अंतिम उर्वरक उपयोग',
+      lastFertilizerPlaceholder: 'जैसे यूरिया, DAP',
     },
     dashboard: {
       currentWeather: 'वर्तमान मौसम',
@@ -335,6 +363,20 @@ const COPY: Record<Language, any> = {
       gpsUsing: 'GPS स्थान वापरले जात आहे.',
       gpsDenied: 'GPS उपलब्ध नाही. कृपया शहर निवडा.',
       selectCity: 'शहर निवडा',
+      hasSoilCard: 'तुमच्याकडे मृदा आरोग्य कार्ड आहे का?',
+      soilCardDesc: 'तुमच्या कार्डमध्ये अचूक माती पोषक डेटा आहे. यामुळे आम्ही अधिक अचूक शिफारसी देऊ शकतो.',
+      soilCardTitle: 'मृदा आरोग्य कार्ड',
+      soilCardSub: 'सरकार / कृषी केंद्राद्वारे जारी. NPK, pH आणि अधिक माहिती समाविष्ट.',
+      yesSoilCard: 'होय, माझ्याकडे आहे',
+      noSoilCard: 'नाही, माझ्याकडे नाही',
+      soilTypeLabel: 'मातीचा प्रकार',
+      soilTypeSub: 'अंदाजे मूल्ये वापरली जातील',
+      soilTypeDesc: 'तुमचा मातीचा प्रकार निवडा आणि आम्ही तुमच्यासाठी मातीचे मापदंड अनुमानित करू.',
+      soilTypeClay: 'चिकणमाती',
+      soilTypeSandy: 'वाळूयुक्त माती',
+      soilTypeLoamy: 'गाळाची माती',
+      lastFertilizerLabel: 'शेवटचे वापरलेले खत',
+      lastFertilizerPlaceholder: 'उदा. युरिया, DAP',
     },
     dashboard: {
       currentWeather: 'सध्याचे हवामान',
@@ -635,6 +677,9 @@ const InputFormPage = ({
   const [stage, setStage] = useState<CropStage>('Vegetative');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hasSoilCard, setHasSoilCard] = useState<boolean | null>(null);
+  const [soilType, setSoilType] = useState<'Clay' | 'Sandy' | 'Loamy'>('Loamy');
+  const [lastFertilizer, setLastFertilizer] = useState('');
   const c = COPY[language];
 
   const CITY_COORDS: Record<string, { lat: number; lon: number }> = {
@@ -648,6 +693,12 @@ const InputFormPage = ({
     Jaipur: { lat: 26.9124, lon: 75.7873 },
     Nagpur: { lat: 21.1458, lon: 79.0882 },
     Kolkata: { lat: 22.5726, lon: 88.3639 },
+  };
+
+  const SOIL_PRESETS: Record<string, { moisture: number; n: number; p: number; k: number; ph: number }> = {
+    Clay:  { moisture: 60, n: 40, p: 30, k: 35, ph: 6.5 },
+    Sandy: { moisture: 25, n: 20, p: 15, k: 20, ph: 6.0 },
+    Loamy: { moisture: 50, n: 50, p: 40, k: 45, ph: 6.8 },
   };
 
   const [gpsMode, setGpsMode] = useState<'idle' | 'loading' | 'gps' | 'denied'>('idle');
@@ -695,6 +746,180 @@ const InputFormPage = ({
     ? { lat: gpsCoords.lat, lon: gpsCoords.lon, name: 'GPS' }
     : { lat: CITY_COORDS[selectedCity].lat, lon: CITY_COORDS[selectedCity].lon, name: selectedCity };
 
+  const preset = SOIL_PRESETS[soilType];
+
+  const handleSubmit = async (overrides?: { moisture: number; nutrients: { n: number; p: number; k: number }; ph: number }) => {
+    try {
+      setError(null);
+      setLoading(true);
+      const body = overrides
+        ? { moisture: overrides.moisture, nutrients: overrides.nutrients, ph: overrides.ph, stage, crop, language, location: effectiveLocation }
+        : { moisture, nutrients, stage, crop, ph, language, location: effectiveLocation };
+      const response = await fetch('/api/recommendations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) throw new Error(c.input.recommendationFailed);
+      const data = await response.json();
+      const recommendation: RecommendationData = {
+        id: data.id,
+        irrigationText: data.irrigationText,
+        fertilizerText: data.fertilizerText,
+        rationale: data.rationale,
+        progress: data.progress,
+      };
+      const weatherData: WeatherSummary = data.weather;
+      onRecommendationReady({ recommendation, weather: weatherData });
+      onNext();
+    } catch (e: any) {
+      setError(e.message || c.input.recommendationFailed);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ---- SCREEN: Soil Card Question ----
+  if (hasSoilCard === null) {
+    return (
+      <div className="flex flex-col gap-8 pb-24">
+        <div className="flex items-center justify-between px-1">
+          <div className="flex items-center gap-2">
+            <Sprout size={20} className="text-[#1f4d2b]" />
+            <h1 className="text-lg font-bold text-[#1f4d2b]">KrishiMitra</h1>
+          </div>
+        </div>
+        <div className="flex flex-col gap-1 px-1">
+          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{c.input.fieldAnalysis}</span>
+          <h2 className="text-2xl font-bold text-gray-900">{c.input.hasSoilCard}</h2>
+          <p className="text-xs text-gray-500 font-medium leading-relaxed">{c.input.soilCardDesc}</p>
+        </div>
+        <div className="bg-[#e6f4ea] rounded-3xl p-8 flex flex-col items-center gap-4">
+          <div className="p-4 bg-[#1f4d2b] rounded-2xl text-white">
+            <Leaf size={36} fill="currentColor" />
+          </div>
+          <span className="text-sm font-bold text-[#1f4d2b] text-center">{c.input.soilCardTitle}</span>
+          <span className="text-[10px] text-gray-500 font-medium text-center leading-relaxed">{c.input.soilCardSub}</span>
+        </div>
+        <div className="flex flex-col gap-3">
+          <button
+            onClick={() => setHasSoilCard(true)}
+            className="w-full bg-[#1f4d2b] text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform shadow-lg shadow-green-900/20"
+          >
+            <Leaf size={18} /> {c.input.yesSoilCard}
+          </button>
+          <button
+            onClick={() => setHasSoilCard(false)}
+            className="w-full bg-white border border-gray-200 text-gray-700 py-4 rounded-2xl font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform shadow-sm"
+          >
+            {c.input.noSoilCard}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ---- SCREEN: Flow B � No Soil Health Card (simplified) ----
+  if (hasSoilCard === false) {
+    return (
+      <div className="flex flex-col gap-6 pb-24">
+        <div className="flex items-center justify-between px-1">
+          <div className="flex items-center gap-2">
+            <Sprout size={20} className="text-[#1f4d2b]" />
+            <h1 className="text-lg font-bold text-[#1f4d2b]">KrishiMitra</h1>
+          </div>
+          <button onClick={() => setHasSoilCard(null)} className="text-xs font-bold text-[#1f4d2b] bg-[#e6f4ea] px-3 py-1.5 rounded-xl">? Back</button>
+        </div>
+        <div className="flex flex-col gap-1 px-1">
+          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{c.input.fieldAnalysis}</span>
+          <h2 className="text-2xl font-bold text-gray-900">{c.input.fieldStatusTitle}</h2>
+          <p className="text-xs text-gray-500 font-medium leading-relaxed">{c.input.soilTypeDesc}</p>
+        </div>
+        <div className="bg-white p-5 rounded-2xl border border-gray-100 flex flex-col gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-[#1f4d2b] rounded-lg text-white"><Leaf size={18} /></div>
+            <div className="flex flex-col">
+              <span className="text-sm font-bold text-gray-800">{c.input.soilTypeLabel}</span>
+              <span className="text-[10px] text-gray-400 font-medium">{c.input.soilTypeSub}</span>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            {(['Clay', 'Sandy', 'Loamy'] as const).map((type) => (
+              <button
+                key={type}
+                onClick={() => setSoilType(type)}
+                className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all ${
+                  soilType === type ? 'bg-[#1f4d2b] text-white shadow-md' : 'bg-[#f5f5f0] text-gray-600'
+                }`}
+              >
+                {c.input[`soilType${type}`] as string}
+              </button>
+            ))}
+          </div>
+          <div className="bg-[#f5f5f0] rounded-xl p-3 flex gap-3 flex-wrap">
+            <span className="text-[10px] font-bold text-gray-500">~Moisture: {preset.moisture}%</span>
+            <span className="text-[10px] font-bold text-gray-500">pH: {preset.ph}</span>
+            <span className="text-[10px] font-bold text-gray-500">N: {preset.n}</span>
+            <span className="text-[10px] font-bold text-gray-500">P: {preset.p}</span>
+            <span className="text-[10px] font-bold text-gray-500">K: {preset.k}</span>
+          </div>
+        </div>
+        <div className="bg-white p-5 rounded-2xl border border-gray-100 flex flex-col gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-[#1f4d2b] rounded-lg text-white"><Sprout size={18} /></div>
+            <div className="flex flex-col">
+              <span className="text-sm font-bold text-gray-800">{c.input.cropTypeTitle}</span>
+              <span className="text-[10px] text-gray-400 font-medium">{c.input.cropTypeSub}</span>
+            </div>
+          </div>
+          <select value={crop} onChange={(e) => setCrop(e.target.value as Crop)} className="w-full bg-[#f5f5f0] p-4 rounded-xl text-sm font-bold text-gray-700 focus:outline-none appearance-none">
+            <option value="Maize">Maize</option>
+            <option value="Wheat">Wheat</option>
+            <option value="Rice">Rice</option>
+            <option value="Cotton">Cotton</option>
+          </select>
+        </div>
+        <div className="bg-white p-5 rounded-2xl border border-gray-100 flex flex-col gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-[#1f4d2b] rounded-lg text-white"><Sprout size={18} /></div>
+            <div className="flex flex-col">
+              <span className="text-sm font-bold text-gray-800">{c.input.cropStageTitle}</span>
+              <span className="text-[10px] text-gray-400 font-medium">{c.input.cropStageSub}</span>
+            </div>
+          </div>
+          <select value={stage} onChange={(e) => setStage(e.target.value as CropStage)} className="w-full bg-[#f5f5f0] p-4 rounded-xl text-sm font-bold text-gray-700 focus:outline-none appearance-none">
+            <option value="Seedling">{c.input.stageSeedling}</option>
+            <option value="Vegetative">{c.input.stageVegetative}</option>
+            <option value="Flowering">{c.input.stageFlowering}</option>
+            <option value="Harvest">{c.input.stageHarvest}</option>
+          </select>
+        </div>
+        <div className="flex flex-col gap-3 mt-2">
+          <button
+            onClick={() => handleSubmit({ moisture: preset.moisture, nutrients: { n: preset.n, p: preset.p, k: preset.k }, ph: preset.ph })}
+            disabled={loading}
+            className="w-full bg-[#1f4d2b] text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform shadow-lg shadow-green-900/20 disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {loading ? c.input.calculating : c.input.getRecommendation} <Sparkles size={18} />
+          </button>
+          {error && <p className="text-[10px] text-center text-red-500 font-medium">{error}</p>}
+          {gpsMode === 'loading' && <p className="text-[10px] text-center text-gray-500 font-medium">{c.input.gpsLoading}</p>}
+          {gpsMode === 'gps' && <p className="text-[10px] text-center text-gray-500 font-medium">{c.input.gpsUsing}</p>}
+          {gpsMode === 'denied' && (
+            <div className="flex flex-col gap-2">
+              <p className="text-[10px] text-center text-gray-600 font-medium">{c.input.gpsDenied}</p>
+              <select value={selectedCity} onChange={(e) => setSelectedCity(e.target.value)} className="w-full bg-white p-3 rounded-xl text-xs font-bold text-gray-700 focus:outline-none appearance-none border border-gray-100">
+                {Object.keys(CITY_COORDS).map((city) => (<option key={city} value={city}>{city}</option>))}
+              </select>
+            </div>
+          )}
+          <p className="text-[10px] text-center text-gray-400 font-medium">{c.input.realTimeSatelliteSensor}</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ---- SCREEN: Flow A � Has Soil Health Card (detailed) ----
   return (
     <div className="flex flex-col gap-6 pb-24">
       {/* Header */}
@@ -704,6 +929,7 @@ const InputFormPage = ({
           <h1 className="text-lg font-bold text-[#1f4d2b]">KrishiMitra</h1>
         </div>
         <div className="flex items-center gap-3">
+          <button onClick={() => setHasSoilCard(null)} className="text-xs font-bold text-[#1f4d2b] bg-[#e6f4ea] px-3 py-1.5 rounded-xl">? Back</button>
           <div className="relative">
             <Bell size={18} className="text-gray-400" />
             <div className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-orange-400 rounded-full border-2 border-[#f9f8f2]" />
