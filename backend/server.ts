@@ -477,7 +477,13 @@ app.post('/api/recommendations', async (req, res) => {
     const weather = await fetchWeather(body.location?.lat, body.location?.lon, language);
 
     // Try Gemini first, fallback to rule-based
-    const geminiRec = await generateGeminiRecommendation(body, weather, language);
+    let geminiRec: any = null;
+    try {
+      geminiRec = await generateGeminiRecommendation(body, weather, language);
+    } catch (e) {
+      console.error('Gemini generation failed, using rule-based fallback:', e);
+    }
+    
     const derived = deriveRecommendations(body, weather, language);
 
     const irrigationWhen = geminiRec?.irrigationWhen || derived.irrigationWhen;
