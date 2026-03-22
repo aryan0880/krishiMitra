@@ -26,7 +26,11 @@ const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 // Hardcoded for now until auth is restored/added
 const DEFAULT_USER_ID = 1;
 
-app.use(cors()); // Enable CORS for all origins
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+})); // Enable CORS with more explicit settings
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'dist')));
 
