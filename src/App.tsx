@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://krishimitra-backend-iuxe.onrender.com';
+const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
 // --- Types ---
 type Screen = 'landing' | 'signup' | 'input' | 'dashboard' | 'report';
