@@ -1,14 +1,17 @@
 import 'dotenv/config';
 import express from 'express';
+import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { getRecommendationById, saveRecommendation } from './db';
+import { GoogleGenerativeAI } from '@google/genai';
 import {
   getAnalyticsSummary,
   getLatestSensorReading,
+  getRecommendationById,
   getRecommendationRunById,
   getSensorHistory,
   getSoilReportByRunId,
+  saveRecommendation,
   saveRecommendationRun,
   saveSensorReading,
 } from './db';
@@ -16,9 +19,14 @@ import {
 const app = express();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+// Initialize Gemini
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+
 // Hardcoded for now until auth is restored/added
 const DEFAULT_USER_ID = 1;
 
+app.use(cors()); // Enable CORS for all origins
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'dist')));
 
@@ -71,7 +79,8 @@ async function fetchWeather(lat: number | undefined, lon: number | undefined, la
   const longitude = lon ?? 73.8567;
 
   const base =
-    process.env.WEATHER_API_BASE ??
+    (process.env.WEATHER_API_BASE && process.env.WEATHER_API_BASE.trim() !== '') ?
+    process.env.WEATHER_API_BASE :
     'https://api.open-meteo.com/v1/forecast';
 
   const url = new URL(base);
@@ -364,104 +373,6 @@ function getNextStage(stage: Stage): Stage {
   }
 }
 
-function buildReasons(
-  input: RecommendationRequest,
-  weather: WeatherSummary,
-  language: UiLanguage,
-  derived: { irrigationText: string; fertilizerText: string; rationale: string },
-): string[] {
-  const reasons: string[] = [];
-
-  // Moisture factor
-  if (input.moisture < 35) {
-    reasons.push(
-      language === 'English'
-        ? `Soil moisture is low (${input.moisture}%), increasing water stress risk.`
-        : language === 'Hindi'
-          ? `मिट्टी की नमी कम है (${input.moisture}%), जिससे पानी की कमी का जोखिम बढ़ता है।`
-          : `मातीतील ओलावा कमी आहे (${input.moisture}%), त्यामुळे पाण्याचा ताण वाढतो.`
-    );
-  } else if (input.moisture < 50) {
-    reasons.push(
-      language === 'English'
-        ? `Soil moisture is moderate (${input.moisture}%), irrigation may be needed soon.`
-        : language === 'Hindi'
-          ? `मिट्टी की नमी मध्यम है (${input.moisture}%), जल्द सिंचाई की जरूरत हो सकती है।`
-          : `मातीतील ओलावा मध्यम आहे (${input.moisture}%), लवकर सिंचनाची गरज भासू शकते.`
-    );
-  } else {
-    reasons.push(
-      language === 'English'
-        ? `Soil moisture is adequate (${input.moisture}%), heavy irrigation can be avoided.`
-        : language === 'Hindi'
-          ? `मिट्टी की नमी पर्याप्त है (${input.moisture}%), इसलिए अधिक सिंचाई से बचा जा सकता है।`
-          : `मातीतील ओलावा पुरेसा आहे (${input.moisture}%), जास्त सिंचन टाळता येईल.`
-    );
-  }
-
-  // Nitrogen (N) factor
-  if (input.nutrients.n < 50) {
-    reasons.push(
-      language === 'English'
-        ? 'Nitrogen is below the typical stage requirement, so top-dress nitrogen is advised.'
-        : language === 'Hindi'
-          ? 'नाइट्रोजन स्तर फसल चरण के लिए सामान्य जरूरत से कम है, इसलिए टॉप-ड्रेस नाइट्रोजन सलाह है।'
-          : 'नायट्रोजनची पातळी पिकाच्या टप्प्यासाठी अपेक्षित स्तरापेक्षा कमी आहे, त्यामुळे टॉप-ड्रेस नायट्रोजन सुचवले आहे.'
-    );
-  } else {
-    reasons.push(
-      language === 'English'
-        ? 'Nitrogen is within a safe range; avoid over-application.'
-        : language === 'Hindi'
-          ? 'नाइट्रोजन स्तर सुरक्षित सीमा में है; अधिक मात्रा से बचें।'
-          : 'नायट्रोजन सुरक्षित मर्यादेत आहे; अति प्रमाण टाळा.'
-    );
-  }
-
-  // pH factor (simple)
-  if (typeof input.ph === 'number') {
-    if (input.ph < 5.5) {
-      reasons.push(
-        language === 'English'
-          ? `pH is acidic (${input.ph.toFixed(1)}). Consider liming for nutrient availability.`
-          : language === 'Hindi'
-            ? `pH अम्लीय है (${input.ph.toFixed(1)}). पोषक तत्वों की उपलब्धता के लिए चूना देने पर विचार करें।`
-            : `pH आम्लीय आहे (${input.ph.toFixed(1)}). पोषक उपलब्धतेसाठी चुनखडीबद्दल विचार करा.`
-      );
-    } else if (input.ph > 7.5) {
-      reasons.push(
-        language === 'English'
-          ? `pH is alkaline (${input.ph.toFixed(1)}). Check micronutrient availability.`
-          : language === 'Hindi'
-            ? `pH क्षारीय है (${input.ph.toFixed(1)}). सूक्ष्म पोषक तत्वों की उपलब्धता जांचें।`
-            : `pH क्षारीय आहे (${input.ph.toFixed(1)}). सूक्ष्म पोषक उपलब्धता तपासा.`
-      );
-    } else {
-      reasons.push(
-        language === 'English'
-          ? `pH is near optimal (${input.ph.toFixed(1)}). Nutrient uptake should be steady.`
-          : language === 'Hindi'
-            ? `pH लगभग इष्टतम है (${input.ph.toFixed(1)}). पोषक ग्रहण स्थिर रहने चाहिए।`
-            : `pH इष्टतम जवळ आहे (${input.ph.toFixed(1)}). पोषक ग्रहण स्थिर राहील.`
-      );
-    }
-  }
-
-  // Weather context
-  reasons.push(
-    language === 'English'
-      ? `Weather context: ${weather.temperature}°C and wind ${weather.windSpeed} km/h can increase evapotranspiration.`
-      : language === 'Hindi'
-        ? `मौसम: तापमान ${weather.temperature}°C और हवा ${weather.windSpeed} किमी/घं. बाष्पोत्सर्जन बढ़ा सकते हैं।`
-        : `हवामान: तापमान ${weather.temperature}°C आणि वारा ${weather.windSpeed} किमी/ता. बाष्पीभवन वाढवू शकतो.`
-  );
-
-  // Keep it explainable but not too repetitive
-  if (reasons.length < 4 && derived.rationale) reasons.push(derived.rationale);
-
-  return reasons.slice(0, 4);
-}
-
 app.get('/api/weather', async (req, res) => {
   const lat = req.query.lat ? Number(req.query.lat) : undefined;
   const lon = req.query.lon ? Number(req.query.lon) : undefined;
@@ -471,83 +382,143 @@ app.get('/api/weather', async (req, res) => {
   res.json(weather);
 });
 
-app.post('/api/recommendations', async (req, res) => {
-  const body: RecommendationRequest = req.body;
-  const language = normalizeLanguage(body.language);
-
-  if (
-    typeof body.moisture !== 'number' ||
-    !body.nutrients ||
-    typeof body.nutrients.n !== 'number' ||
-    typeof body.nutrients.p !== 'number' ||
-    typeof body.nutrients.k !== 'number' ||
-    !body.stage ||
-    typeof body.crop !== 'string' ||
-    typeof body.ph !== 'number'
-  ) {
-    return res.status(400).json({ error: 'Invalid request body' });
+async function generateGeminiRecommendation(
+  input: RecommendationRequest,
+  weather: WeatherSummary,
+  language: UiLanguage,
+): Promise<Partial<RecommendationData> | null> {
+  if (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY === 'MY_GEMINI_API_KEY') {
+    return null;
   }
 
-  const sensorReadingId = await saveSensorReading({
-    userId: DEFAULT_USER_ID,
-    crop: body.crop,
-    stage: body.stage,
-    moisture: body.moisture,
-    n: body.nutrients.n,
-    p: body.nutrients.p,
-    k: body.nutrients.k,
-    ph: body.ph,
-    locationName: body.location?.name,
-    lat: body.location?.lat,
-    lon: body.location?.lon,
-  });
+  try {
+    const prompt = `
+      You are an expert agronomist for KrishiMitra. Provide farming recommendations based on:
+      Crop: ${input.crop}
+      Stage: ${input.stage}
+      Soil Moisture: ${input.moisture}%
+      Nutrients: N=${input.nutrients.n}, P=${input.nutrients.p}, K=${input.nutrients.k}
+      Soil pH: ${input.ph}
+      Weather: ${weather.temperature}°C, ${weather.condition}, Humidity ${weather.humidity}%, Wind ${weather.windSpeed}km/h.
+      Forecast: ${weather.forecastSummary}
+      
+      Language: ${language}
+      
+      Return ONLY a JSON object with these fields:
+      - irrigationText (short instruction for irrigation)
+      - fertilizerText (short instruction for fertilizer)
+      - rationale (detailed explanation in ${language})
+      - reasons (array of 3-4 specific bullet points in ${language})
+      - irrigationMm (number, estimated water needed in mm)
+      - fertilizerNKg (number, kg N per acre)
+      - fertilizerPKg (number, kg P per acre)
+      - fertilizerKKg (number, kg K per acre)
+      - nextStage (string, the expected next growth stage)
+    `;
 
-  const weather = await fetchWeather(body.location?.lat, body.location?.lon, language);
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
+    
+    // Extract JSON from the response text
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[0]);
+    }
+    return null;
+  } catch (error) {
+    console.error('Gemini API error:', error);
+    return null;
+  }
+}
 
-  const derived = deriveRecommendations(body, weather, language);
+app.post('/api/recommendations', async (req, res) => {
+  console.log('Received recommendation request:', req.body);
+  try {
+    const body: RecommendationRequest = req.body;
+    const language = normalizeLanguage(body.language);
 
-  const irrigationWhen = derived.irrigationWhen;
-  const irrigationMm = derived.irrigationMm;
-  const fertilizerNKgN = derived.fertilizerNKg;
-  const fertilizerPKgP = derived.fertilizerPKg;
-  const fertilizerKKgK = derived.fertilizerKKg;
-  const reasons = derived.reasons;
-  const nextStage = derived.nextStage;
+    if (
+      typeof body.moisture !== 'number' ||
+      !body.nutrients ||
+      typeof body.nutrients.n !== 'number' ||
+      typeof body.nutrients.p !== 'number' ||
+      typeof body.nutrients.k !== 'number' ||
+      !body.stage ||
+      typeof body.crop !== 'string' ||
+      typeof body.ph !== 'number'
+    ) {
+      console.log('Invalid request body:', body);
+      return res.status(400).json({ error: 'Invalid request body' });
+    }
 
-  const runId = await saveRecommendationRun({
-    userId: DEFAULT_USER_ID,
-    sensorReadingId,
-    crop: body.crop,
-    stage: body.stage,
-    language,
-    irrigationWhen,
-    irrigationMm,
-    fertilizerNKg: fertilizerNKgN,
-    fertilizerPKg: fertilizerPKgP,
-    fertilizerKKg: fertilizerKKgK,
-    reasons,
-    rationale: derived.rationale,
-    progress: derived.progress,
-    nextStage,
-    weather,
-  });
+    const sensorReadingId = await saveSensorReading({
+      userId: DEFAULT_USER_ID,
+      crop: body.crop,
+      stage: body.stage,
+      moisture: body.moisture,
+      n: body.nutrients.n,
+      p: body.nutrients.p,
+      k: body.nutrients.k,
+      ph: body.ph,
+      locationName: body.location?.name,
+      lat: body.location?.lat,
+      lon: body.location?.lon,
+    });
 
-  // Keep the response shape compatible with the existing frontend,
-  // but include extra fields for dashboard/report features.
-  res.json({
-    id: runId,
-    irrigationText: derived.irrigationText,
-    fertilizerText: derived.fertilizerText,
-    rationale: derived.rationale,
-    progress: derived.progress,
-    nextStage,
-    reasons,
-    irrigationMm,
-    fertilizerNKg: fertilizerNKgN,
-    fertilizerPKg: fertilizerPKgP,
-    fertilizerKKg: fertilizerKKgK,
-    weather,
-  });
+    const weather = await fetchWeather(body.location?.lat, body.location?.lon, language);
+
+    // Try Gemini first, fallback to rule-based
+    const geminiRec = await generateGeminiRecommendation(body, weather, language);
+    const derived = deriveRecommendations(body, weather, language);
+
+    const irrigationWhen = geminiRec?.irrigationWhen || derived.irrigationWhen;
+    const irrigationMm = geminiRec?.irrigationMm ?? derived.irrigationMm;
+    const fertilizerNKgN = geminiRec?.fertilizerNKg ?? derived.fertilizerNKg;
+    const fertilizerPKgP = geminiRec?.fertilizerPKg ?? derived.fertilizerPKg;
+    const fertilizerKKgK = geminiRec?.fertilizerKKg ?? derived.fertilizerKKg;
+    const reasons = geminiRec?.reasons || derived.reasons;
+    const nextStage = geminiRec?.nextStage || derived.nextStage;
+    const rationale = geminiRec?.rationale || derived.rationale;
+    const irrigationText = geminiRec?.irrigationText || derived.irrigationText;
+    const fertilizerText = geminiRec?.fertilizerText || derived.fertilizerText;
+
+    const runId = await saveRecommendationRun({
+      userId: DEFAULT_USER_ID,
+      sensorReadingId,
+      crop: body.crop,
+      stage: body.stage,
+      language,
+      irrigationWhen,
+      irrigationMm,
+      fertilizerNKg: fertilizerNKgN,
+      fertilizerPKg: fertilizerPKgP,
+      fertilizerKKg: fertilizerKKgK,
+      reasons,
+      rationale,
+      progress: derived.progress,
+      nextStage,
+      weather,
+    });
+
+    res.json({
+      id: runId,
+      irrigationText,
+      fertilizerText,
+      rationale,
+      progress: derived.progress,
+      nextStage,
+      reasons,
+      irrigationMm,
+      fertilizerNKg: fertilizerNKgN,
+      fertilizerPKg: fertilizerPKgP,
+      fertilizerKKg: fertilizerKKgK,
+      weather,
+    });
+  } catch (error) {
+    console.error('Error in /api/recommendations:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 app.get('/api/soil-report/:id', async (req, res) => {
@@ -637,4 +608,3 @@ app.listen(PORT, () => {
   // eslint-disable-next-line no-console
   console.log(`Backend server listening on port ${PORT}`);
 });
-

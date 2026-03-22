@@ -24,6 +24,8 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+
 // --- Types ---
 type Screen = 'landing' | 'signup' | 'input' | 'dashboard' | 'report';
 type Language = 'English' | 'Hindi' | 'Marathi';
@@ -665,10 +667,16 @@ const InputFormPage = ({
   onNext, 
   onRecommendationReady,
   language,
+  gpsMode,
+  gpsCoords,
+  onDetectLocation,
 }: { 
   onNext: () => void;
   onRecommendationReady: (data: { recommendation: RecommendationData; weather: WeatherSummary }) => void;
   language: Language;
+  gpsMode: 'idle' | 'loading' | 'gps' | 'denied';
+  gpsCoords: { lat: number; lon: number } | null;
+  onDetectLocation: () => void;
 }) => {
   const [moisture, setMoisture] = useState(45);
   const [nutrients, setNutrients] = useState({ n: 0, p: 0, k: 0 });
@@ -701,46 +709,7 @@ const InputFormPage = ({
     Loamy: { moisture: 50, n: 50, p: 40, k: 45, ph: 6.8 },
   };
 
-  const [gpsMode, setGpsMode] = useState<'idle' | 'loading' | 'gps' | 'denied'>('idle');
-  const [gpsCoords, setGpsCoords] = useState<{ lat: number; lon: number } | null>(null);
   const [selectedCity, setSelectedCity] = useState<string>('Pune');
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const geo = navigator.geolocation;
-    if (!geo) {
-      setGpsMode('denied');
-      setGpsCoords(null);
-      return;
-    }
-
-    setGpsMode('loading');
-    geo.getCurrentPosition(
-      (pos) => {
-        if (cancelled) return;
-        setGpsCoords({
-          lat: pos.coords.latitude,
-          lon: pos.coords.longitude,
-        });
-        setGpsMode('gps');
-      },
-      () => {
-        if (cancelled) return;
-        setGpsCoords(null);
-        setGpsMode('denied');
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 8000,
-        maximumAge: 5 * 60 * 1000,
-      },
-    );
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const effectiveLocation = gpsCoords
     ? { lat: gpsCoords.lat, lon: gpsCoords.lon, name: 'GPS' }
@@ -755,7 +724,7 @@ const InputFormPage = ({
       const body = overrides
         ? { moisture: overrides.moisture, nutrients: overrides.nutrients, ph: overrides.ph, stage, crop, language, location: effectiveLocation }
         : { moisture, nutrients, stage, crop, ph, language, location: effectiveLocation };
-      const response = await fetch('/api/recommendations', {
+      const response = await fetch(`${API_BASE_URL}/api/recommendations`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -819,7 +788,7 @@ const InputFormPage = ({
     );
   }
 
-  // ---- SCREEN: Flow B — No Soil Health Card (simplified) ----
+  // ---- SCREEN: Flow B â€“ No Soil Health Card (simplified) ----
   if (hasSoilCard === false) {
     return (
       <div className="flex flex-col gap-6 pb-24">
@@ -907,7 +876,15 @@ const InputFormPage = ({
           {gpsMode === 'gps' && <p className="text-[10px] text-center text-gray-500 font-medium">{c.input.gpsUsing}</p>}
           {gpsMode === 'denied' && (
             <div className="flex flex-col gap-2">
-              <p className="text-[10px] text-center text-gray-600 font-medium">{c.input.gpsDenied}</p>
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] text-gray-600 font-medium">{c.input.gpsDenied}</p>
+                <button 
+                  onClick={onDetectLocation}
+                  className="text-[10px] font-bold text-[#1f4d2b] underline"
+                >
+                  Retry GPS
+                </button>
+              </div>
               <select value={selectedCity} onChange={(e) => setSelectedCity(e.target.value)} className="w-full bg-white p-3 rounded-xl text-xs font-bold text-gray-700 focus:outline-none appearance-none border border-gray-100">
                 {Object.keys(CITY_COORDS).map((city) => (<option key={city} value={city}>{city}</option>))}
               </select>
@@ -919,7 +896,7 @@ const InputFormPage = ({
     );
   }
 
-  // ---- SCREEN: Flow A — Has Soil Health Card (detailed) ----
+  // ---- SCREEN: Flow A â€“ Has Soil Health Card (detailed) ----
   return (
     <div className="flex flex-col gap-6 pb-24">
       {/* Header */}
@@ -1087,45 +1064,7 @@ const InputFormPage = ({
       {/* CTA Button */}
       <div className="flex flex-col gap-3 mt-2">
         <button 
-          onClick={async () => {
-            try {
-              setError(null);
-              setLoading(true);
-              const response = await fetch('/api/recommendations', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  moisture,
-                  nutrients,
-                  stage,
-                  crop,
-                  ph,
-                  language,
-                  location: effectiveLocation,
-                }),
-              });
-              if (!response.ok) {
-                throw new Error(c.input.recommendationFailed);
-              }
-              const data = await response.json();
-              const recommendation: RecommendationData = {
-                id: data.id,
-                irrigationText: data.irrigationText,
-                fertilizerText: data.fertilizerText,
-                rationale: data.rationale,
-                progress: data.progress,
-              };
-              const weather: WeatherSummary = data.weather;
-              onRecommendationReady({ recommendation, weather });
-              onNext();
-            } catch (e: any) {
-              setError(e.message || c.input.recommendationFailed);
-            } finally {
-              setLoading(false);
-            }
-          }}
+          onClick={() => handleSubmit()}
           disabled={loading}
           className="w-full bg-[#1f4d2b] text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform shadow-lg shadow-green-900/20 disabled:opacity-60 disabled:cursor-not-allowed"
         >
@@ -1148,9 +1087,15 @@ const InputFormPage = ({
         )}
         {gpsMode === 'denied' && (
           <div className="flex flex-col gap-2">
-            <p className="text-[10px] text-center text-gray-600 font-medium">
-              {c.input.gpsDenied}
-            </p>
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] text-gray-600 font-medium">{c.input.gpsDenied}</p>
+              <button 
+                onClick={onDetectLocation}
+                className="text-[10px] font-bold text-[#1f4d2b] underline"
+              >
+                Retry GPS
+              </button>
+            </div>
             <select
               value={selectedCity}
               onChange={(e) => setSelectedCity(e.target.value)}
@@ -1203,9 +1148,9 @@ const DashboardPage = ({
     const load = async () => {
       try {
         const [latestRes, historyRes, analyticsRes] = await Promise.all([
-          fetch('/api/sensors/latest'),
-          fetch('/api/sensors/history?limit=5'),
-          fetch('/api/analytics/summary'),
+          fetch(`${API_BASE_URL}/api/sensors/latest`),
+          fetch(`${API_BASE_URL}/api/sensors/history?limit=5`),
+          fetch(`${API_BASE_URL}/api/analytics/summary`),
         ]);
 
         if (!latestRes.ok || !historyRes.ok || !analyticsRes.ok) return;
@@ -1512,7 +1457,7 @@ const SoilReportPage = ({
       try {
         setLoading(true);
         setError(null);
-        const res = await fetch(`/api/soil-report/${runId}`);
+        const res = await fetch(`${API_BASE_URL}/api/soil-report/${runId}`);
         if (!res.ok) throw new Error('Failed to load report');
         const data = (await res.json()) as SoilReportResponse;
         if (cancelled) return;
@@ -1743,6 +1688,42 @@ export default function App() {
   const [language, setLanguage] = useState<Language>((localStorage.getItem('lang') as Language) || 'English');
   const [soilReportId, setSoilReportId] = useState<number | null>(null);
 
+  const [gpsMode, setGpsMode] = useState<'idle' | 'loading' | 'gps' | 'denied'>('idle');
+  const [gpsCoords, setGpsCoords] = useState<{ lat: number; lon: number } | null>(null);
+
+  const detectLocation = () => {
+    const geo = navigator.geolocation;
+    if (!geo) {
+      setGpsMode('denied');
+      setGpsCoords(null);
+      return;
+    }
+
+    setGpsMode('loading');
+    geo.getCurrentPosition(
+      (pos) => {
+        setGpsCoords({
+          lat: pos.coords.latitude,
+          lon: pos.coords.longitude,
+        });
+        setGpsMode('gps');
+      },
+      () => {
+        setGpsCoords(null);
+        setGpsMode('denied');
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 8000,
+        maximumAge: 5 * 60 * 1000,
+      },
+    );
+  };
+
+  useEffect(() => {
+    detectLocation();
+  }, []);
+
   useEffect(() => {
     const savedUser = localStorage.getItem('user');
     if (savedUser) {
@@ -1791,6 +1772,9 @@ export default function App() {
               setWeather(weather);
             }}
             language={language}
+            gpsMode={gpsMode}
+            gpsCoords={gpsCoords}
+            onDetectLocation={detectLocation}
           />
         );
       case 'dashboard':
