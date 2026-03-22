@@ -70,6 +70,19 @@ type RecommendationResponse = {
   weather: WeatherSummary;
 };
 
+type RecommendationData = {
+  irrigationText: string;
+  fertilizerText: string;
+  rationale: string;
+  reasons: string[];
+  irrigationMm: number;
+  fertilizerNKg: number;
+  fertilizerPKg: number;
+  fertilizerKKg: number;
+  nextStage: string;
+  irrigationWhen?: string;
+};
+
 // Simple health check
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
