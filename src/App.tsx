@@ -724,13 +724,25 @@ const InputFormPage = ({
       const body = overrides
         ? { moisture: overrides.moisture, nutrients: overrides.nutrients, ph: overrides.ph, stage, crop, language, location: effectiveLocation }
         : { moisture, nutrients, stage, crop, ph, language, location: effectiveLocation };
-      const response = await fetch(`${API_BASE_URL}/api/recommendations`, {
+      
+      const url = `${API_BASE_URL}/api/recommendations`;
+      console.log('Fetching recommendation from:', url);
+
+      const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      if (!response.ok) throw new Error(c.input.recommendationFailed);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('API Error Response:', errorData);
+        throw new Error(errorData.error || c.input.recommendationFailed);
+      }
+
       const data = await response.json();
+      console.log('Recommendation received:', data);
+      
       const recommendation: RecommendationData = {
         id: data.id,
         irrigationText: data.irrigationText,
@@ -742,6 +754,7 @@ const InputFormPage = ({
       onRecommendationReady({ recommendation, weather: weatherData });
       onNext();
     } catch (e: any) {
+      console.error('Fetch error:', e);
       setError(e.message || c.input.recommendationFailed);
     } finally {
       setLoading(false);
