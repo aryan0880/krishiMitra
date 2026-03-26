@@ -2,7 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { GoogleGenerativeAI } from '@google/genai';
+import { GoogleGenAI } from '@google/genai';
 import {
   getAnalyticsSummary,
   getLatestSensorReading,
@@ -19,8 +19,7 @@ const app = express();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Initialize Gemini
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
 
 // Hardcoded for now until auth is restored/added
 const DEFAULT_USER_ID = 1;
@@ -437,9 +436,11 @@ async function generateGeminiRecommendation(
       - nextStage (string, the expected next growth stage)
     `;
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
+    const result = await genAI.models.generateContent({
+      model: 'gemini-1.5-flash',
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    });
+    const text = result.text ?? '';
     
     // Extract JSON from the response text
     const jsonMatch = text.match(/\{[\s\S]*\}/);
