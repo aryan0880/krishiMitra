@@ -38,6 +38,7 @@ type WeatherSummary = {
   humidity: number;
   windSpeed: number;
   forecastSummary: string;
+  locationName?: string | null;
 };
 
 type RecommendationData = {
@@ -1135,11 +1136,13 @@ const DashboardPage = ({
   weather,
   language,
   onOpenSoilReport,
+  gpsCoords,
 }: {
   recommendation: RecommendationData | null;
   weather: WeatherSummary | null;
   language: Language;
   onOpenSoilReport: (runId: number) => void;
+  gpsCoords: { lat: number; lon: number } | null;
 }) => {
   const c = COPY[language];
   const temperature = weather?.temperature ?? 28;
@@ -1154,6 +1157,14 @@ const DashboardPage = ({
   const [latestSensor, setLatestSensor] = useState<SensorReading | null>(null);
   const [history, setHistory] = useState<SensorReading[]>([]);
   const [analytics, setAnalytics] = useState<AnalyticsSummary | null>(null);
+
+  const [liveWeather, setLiveWeather] = useState<WeatherSummary | null>(null);
+  const effectiveWeather = liveWeather ?? weather;
+  const liveTemperature = effectiveWeather?.temperature ?? 28;
+  const liveHumidity = effectiveWeather?.humidity ?? 60;
+  const liveWindSpeed = effectiveWeather?.windSpeed ?? 10;
+  const liveCondition = effectiveWeather?.condition ?? 'Field conditions';
+  const liveLocationName = effectiveWeather?.locationName ?? null;
 
   useEffect(() => {
     let cancelled = false;
@@ -1220,6 +1231,98 @@ const DashboardPage = ({
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    let interval: number | undefined;
+
+    const refreshSensors = async () => {
+      try {
+        const [latestRes, historyRes] = await Promise.all([
+          fetch(`${API_BASE_URL}/api/sensors/latest`),
+          fetch(`${API_BASE_URL}/api/sensors/history?limit=5`),
+        ]);
+        if (!latestRes.ok || !historyRes.ok) return;
+
+        const latestRaw = await latestRes.json();
+        const historyRaw = await historyRes.json();
+        if (cancelled) return;
+
+        if (latestRaw) {
+          setLatestSensor({
+            sensorReadingId: latestRaw.id,
+            createdAt: latestRaw.created_at,
+            crop: latestRaw.crop,
+            stage: latestRaw.stage,
+            moisture: latestRaw.moisture,
+            n: latestRaw.n,
+            p: latestRaw.p,
+            k: latestRaw.k,
+            ph: latestRaw.ph,
+            locationName: latestRaw.location_name,
+            lat: latestRaw.lat,
+            lon: latestRaw.lon,
+          });
+        }
+
+        setHistory(
+          (historyRaw ?? []).map((r: any) => ({
+            sensorReadingId: r.id,
+            createdAt: r.created_at,
+            crop: r.crop,
+            stage: r.stage,
+            moisture: r.moisture,
+            n: r.n,
+            p: r.p,
+            k: r.k,
+            ph: r.ph,
+            locationName: r.location_name,
+            lat: r.lat,
+            lon: r.lon,
+          })),
+        );
+      } catch {
+        // ignore
+      }
+    };
+
+    interval = window.setInterval(refreshSensors, 5000);
+    return () => {
+      cancelled = true;
+      if (interval) window.clearInterval(interval);
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    let interval: number | undefined;
+
+    const loadWeather = async () => {
+      try {
+        const url = new URL(`${API_BASE_URL}/api/weather`);
+        if (gpsCoords) {
+          url.searchParams.set('lat', String(gpsCoords.lat));
+          url.searchParams.set('lon', String(gpsCoords.lon));
+        }
+        url.searchParams.set('lang', language);
+
+        const res = await fetch(url.toString());
+        if (!res.ok) return;
+        const data = (await res.json()) as WeatherSummary;
+        if (cancelled) return;
+        setLiveWeather(data);
+      } catch {
+        // ignore
+      }
+    };
+
+    loadWeather();
+    interval = window.setInterval(loadWeather, 60_000);
+    return () => {
+      cancelled = true;
+      if (interval) window.clearInterval(interval);
+    };
+  }, [gpsCoords, language]);
+
   const localizedStageLabel = (stageValue: string) => {
     switch (stageValue) {
       case 'Seedling':
@@ -1254,10 +1357,12 @@ const DashboardPage = ({
           <div className="flex flex-col gap-1">
             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{c.dashboard.currentWeather}</span>
             <div className="flex items-baseline gap-1">
-              <span className="text-4xl font-bold text-gray-800">{temperature}°</span>
+              <span className="text-4xl font-bold text-gray-800">{liveTemperature}°</span>
               <span className="text-xl font-bold text-gray-400">C</span>
             </div>
-            <span className="text-xs font-bold text-gray-500">{condition}</span>
+            <span className="text-xs font-bold text-gray-500">
+              {liveCondition}{liveLocationName ? ` • ${liveLocationName}` : ''}
+            </span>
           </div>
           <div className="w-16 h-16 bg-[#e6f4ea] rounded-full flex items-center justify-center text-[#1f4d2b]">
             <CloudSun size={32} />
@@ -1267,12 +1372,12 @@ const DashboardPage = ({
         <div className="flex gap-4">
           <div className="flex-1 bg-white p-4 rounded-2xl border border-gray-100 flex flex-col items-center gap-2">
             <Droplets size={18} className="text-blue-400" />
-            <span className="text-sm font-bold text-gray-800">{humidity}%</span>
+            <span className="text-sm font-bold text-gray-800">{liveHumidity}%</span>
             <span className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">{c.dashboard.humidity}</span>
           </div>
           <div className="flex-1 bg-white p-4 rounded-2xl border border-gray-100 flex flex-col items-center gap-2">
             <Wind size={18} className="text-gray-400" />
-            <span className="text-sm font-bold text-gray-800">{windSpeed} km/h</span>
+            <span className="text-sm font-bold text-gray-800">{liveWindSpeed} km/h</span>
             <span className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">{c.dashboard.windSpeed}</span>
           </div>
         </div>
@@ -1796,6 +1901,7 @@ export default function App() {
             recommendation={recommendation}
             weather={weather}
             language={language}
+            gpsCoords={gpsCoords}
             onOpenSoilReport={(id) => {
               setSoilReportId(id);
               setCurrentScreen('report');
@@ -1814,6 +1920,7 @@ export default function App() {
             recommendation={recommendation}
             weather={weather}
             language={language}
+            gpsCoords={gpsCoords}
             onOpenSoilReport={(id) => {
               setSoilReportId(id);
               setCurrentScreen('report');

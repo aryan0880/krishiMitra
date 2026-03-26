@@ -42,6 +42,21 @@ const PORT = Number(process.env.PORT || process.env.BACKEND_PORT || 4000);
 type Stage = 'Seedling' | 'Vegetative' | 'Flowering' | 'Harvest';
 type UiLanguage = 'English' | 'Hindi' | 'Marathi';
 
+function parseBoolEnv(value: string | undefined): boolean {
+  if (!value) return false;
+  const v = value.trim().toLowerCase();
+  return v === '1' || v === 'true' || v === 'yes' || v === 'on';
+}
+
+function clampNumber(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function jitter(current: number, step: number, min: number, max: number) {
+  const next = current + (Math.random() * 2 - 1) * step;
+  return clampNumber(next, min, max);
+}
+
 type RecommendationRequest = {
   moisture: number;
   nutrients: { n: number; p: number; k: number };
@@ -58,6 +73,7 @@ type WeatherSummary = {
   humidity: number;
   windSpeed: number;
   forecastSummary: string;
+  locationName?: string | null;
 };
 
 type RecommendationResponse = {
@@ -93,6 +109,60 @@ function normalizeLanguage(value: unknown): UiLanguage {
   return LANGS.includes(value as UiLanguage) ? (value as UiLanguage) : 'English';
 }
 
+const reverseGeocodeCache = new Map<string, { name: string | null; at: number }>();
+function reverseGeocodeCacheKey(lat: number, lon: number) {
+  return `${lat.toFixed(3)},${lon.toFixed(3)}`;
+}
+
+async function reverseGeocode(lat: number, lon: number, language: UiLanguage): Promise<string | null> {
+  const key = reverseGeocodeCacheKey(lat, lon);
+  const cached = reverseGeocodeCache.get(key);
+  if (cached && Date.now() - cached.at < 6 * 60 * 60 * 1000) return cached.name;
+
+  const acceptLanguage =
+    language === 'Hindi' ? 'hi' :
+    language === 'Marathi' ? 'mr' :
+    'en';
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 4500);
+  try {
+    const url = new URL('https://nominatim.openstreetmap.org/reverse');
+    url.searchParams.set('format', 'jsonv2');
+    url.searchParams.set('lat', String(lat));
+    url.searchParams.set('lon', String(lon));
+    url.searchParams.set('zoom', '10');
+    url.searchParams.set('addressdetails', '1');
+
+    const resp = await fetch(url.toString(), {
+      signal: controller.signal,
+      headers: {
+        // Nominatim usage policy requires a valid User-Agent and recommends contact info.
+        'User-Agent': 'KrishiMitra/1.0 (local dev)',
+        'Accept-Language': acceptLanguage,
+      },
+    });
+    if (!resp.ok) return null;
+    const data: any = await resp.json();
+    const address = data?.address ?? {};
+    const name =
+      address?.city ??
+      address?.town ??
+      address?.village ??
+      address?.suburb ??
+      address?.county ??
+      address?.state ??
+      null;
+
+    reverseGeocodeCache.set(key, { name, at: Date.now() });
+    return name;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function fetchWeather(lat: number | undefined, lon: number | undefined, language: UiLanguage): Promise<WeatherSummary> {
   // Default coordinates (e.g., Pune, India) if none provided
   const latitude = lat ?? 18.5204;
@@ -108,6 +178,7 @@ async function fetchWeather(lat: number | undefined, lon: number | undefined, la
   url.searchParams.set('longitude', String(longitude));
   url.searchParams.set('hourly', 'temperature_2m,relative_humidity_2m,wind_speed_10m');
   url.searchParams.set('current_weather', 'true');
+  url.searchParams.set('timezone', 'auto');
 
   try {
     // Node 18+ provides global `fetch`
@@ -116,9 +187,24 @@ async function fetchWeather(lat: number | undefined, lon: number | undefined, la
 
     const temperature = data.current_weather?.temperature ?? 28;
     const windSpeed = data.current_weather?.windspeed ?? 10;
-    const humidity =
-      data.hourly?.relative_humidity_2m?.[0] ??
-      60;
+    const currentTime: string | undefined = data.current_weather?.time;
+    const hourlyTimes: unknown = data.hourly?.time;
+    const humiditySeries: unknown = data.hourly?.relative_humidity_2m;
+
+    const humidity = (() => {
+      if (
+        currentTime &&
+        Array.isArray(hourlyTimes) &&
+        Array.isArray(humiditySeries)
+      ) {
+        const idx = hourlyTimes.indexOf(currentTime);
+        const value = idx >= 0 ? humiditySeries[idx] : undefined;
+        if (typeof value === 'number' && Number.isFinite(value)) return value;
+      }
+
+      const fallback = Array.isArray(humiditySeries) ? humiditySeries[0] : undefined;
+      return (typeof fallback === 'number' && Number.isFinite(fallback)) ? fallback : 60;
+    })();
 
     const conditionByLang: Record<UiLanguage, string> = {
       English: 'Field conditions',
@@ -134,6 +220,7 @@ async function fetchWeather(lat: number | undefined, lon: number | undefined, la
 
     const condition = conditionByLang[language];
     const forecastSummary = forecastByLang[language];
+    const locationName = await reverseGeocode(latitude, longitude, language).catch(() => null);
 
     return {
       temperature,
@@ -141,6 +228,7 @@ async function fetchWeather(lat: number | undefined, lon: number | undefined, la
       humidity,
       condition,
       forecastSummary,
+      locationName,
     };
   } catch {
     const conditionByLang: Record<UiLanguage, string> = {
@@ -161,6 +249,7 @@ async function fetchWeather(lat: number | undefined, lon: number | undefined, la
       humidity: 60,
       condition: conditionByLang[language],
       forecastSummary: forecastByLang[language],
+      locationName: null,
     };
   }
 }
@@ -622,6 +711,94 @@ app.get('/api/sensors/history', async (req, res) => {
   res.json(rows);
 });
 
+function startSensorSimulator() {
+  const enabled = parseBoolEnv(process.env.SENSOR_SIM_ENABLED);
+  if (!enabled) return;
+
+  const intervalMsRaw = Number(process.env.SENSOR_SIM_INTERVAL_MS ?? 5000);
+  const intervalMs = Number.isFinite(intervalMsRaw) ? clampNumber(intervalMsRaw, 1000, 60_000) : 5000;
+
+  let last = {
+    crop: 'Maize',
+    stage: 'Vegetative' as Stage,
+    moisture: 50,
+    n: 45,
+    p: 35,
+    k: 40,
+    ph: 6.8,
+    locationName: 'GPS' as string | undefined,
+    lat: undefined as number | undefined,
+    lon: undefined as number | undefined,
+  };
+
+  let bootstrapped = false;
+
+  const tick = async () => {
+    try {
+      if (!bootstrapped) {
+        const latest = await getLatestSensorReading(DEFAULT_USER_ID);
+        if (latest) {
+          last = {
+            crop: latest.crop ?? last.crop,
+            stage: (latest.stage as Stage) ?? last.stage,
+            moisture: typeof latest.moisture === 'number' ? latest.moisture : last.moisture,
+            n: typeof latest.n === 'number' ? latest.n : last.n,
+            p: typeof latest.p === 'number' ? latest.p : last.p,
+            k: typeof latest.k === 'number' ? latest.k : last.k,
+            ph: typeof latest.ph === 'number' ? latest.ph : last.ph,
+            locationName: latest.location_name ?? last.locationName,
+            lat: latest.lat ?? last.lat,
+            lon: latest.lon ?? last.lon,
+          };
+        }
+        bootstrapped = true;
+      }
+
+      const moisture = Math.round(jitter(last.moisture, 3.5, 0, 100));
+      const n = Math.round(jitter(last.n, 2.5, 0, 100));
+      const p = Math.round(jitter(last.p, 2.0, 0, 100));
+      const k = Math.round(jitter(last.k, 2.0, 0, 100));
+      const ph = Number(jitter(last.ph, 0.08, 3.5, 9.5).toFixed(1));
+
+      const stage: Stage = last.stage;
+      const crop = last.crop;
+
+      await saveSensorReading({
+        userId: DEFAULT_USER_ID,
+        crop,
+        stage,
+        moisture,
+        n,
+        p,
+        k,
+        ph,
+        locationName: last.locationName,
+        lat: last.lat,
+        lon: last.lon,
+      });
+
+      last = {
+        ...last,
+        moisture,
+        n,
+        p,
+        k,
+        ph,
+      };
+    } catch (e) {
+      console.error('Sensor simulator tick failed:', e);
+    }
+  };
+
+  // Fire once immediately and then on interval.
+  void tick();
+  setInterval(() => {
+    void tick();
+  }, intervalMs);
+
+  console.log(`Sensor simulator enabled (interval ${intervalMs}ms)`);
+}
+
 app.get('/api/analytics/summary', async (_req, res) => {
   const summary = await getAnalyticsSummary(DEFAULT_USER_ID);
   res.json(summary);
@@ -636,3 +813,5 @@ app.listen(PORT, () => {
   // eslint-disable-next-line no-console
   console.log(`Backend server listening on port ${PORT}`);
 });
+
+startSensorSimulator();
