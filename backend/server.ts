@@ -554,7 +554,7 @@ async function generateGeminiRecommendation(
       - nextStage (string, the expected next growth stage)
     `;
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
     const result = await model.generateContent({
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
     });
@@ -737,13 +737,13 @@ app.post('/api/diagnose', async (req, res) => {
     const prompt = `Identify any plant disease or nutrient deficiency in this image.
 Respond ONLY with a valid JSON file.
 Field descriptions:
-- disease: Name of the disease or "Healthy"
-- severity: "Low", "Medium", or "High"
-- affectedArea: estimated percentage of leaf/plant affected (number 0-100)
-- actions: array of strings containing specific treatment steps in ${language}.
-Format Example: {"disease": "Leaf Rust", "severity": "High", "affectedArea": 35, "actions": ["Remove affected leaves", "Apply fungicide"]}`;
+- diseaseName: Name of the disease or "Healthy"
+- severityScore: "Low", "Medium", or "High"
+- confidence: number (0 to 1)
+- treatment: array of strings containing specific treatment steps in ${language}.
+Format Example: {"diseaseName": "Leaf Rust", "severityScore": "High", "confidence": 0.95, "treatment": ["Remove affected leaves", "Apply fungicide"]}`;
     
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
     const result = await model.generateContent({
       contents: [
         {
@@ -767,8 +767,15 @@ Format Example: {"disease": "Leaf Rust", "severity": "High", "affectedArea": 35,
     res.json(data);
   } catch (err: any) {
     console.error('Diagnosis error:', err);
-    if (err.response) console.error('Error detail:', JSON.stringify(err.response, null, 2));
-    res.status(500).json({ error: 'AI diagnosis failed' });
+    let errorMessage = 'AI diagnosis failed';
+    if (err.status === 429) {
+      errorMessage = 'Rate limit exceeded. Please wait a moment before trying again.';
+    } else if (err.status === 404) {
+      errorMessage = 'AI model not found. Please contact support.';
+    } else if (err.message) {
+      errorMessage = err.message;
+    }
+    res.status(err.status || 500).json({ error: errorMessage });
   }
 });
 
@@ -782,7 +789,7 @@ You are helping a farmer in India. Keep answers concise, practical, and highly a
 Language to respond in: ${language}.
 User message: "${message}"`;
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
     const result = await model.generateContent({
       contents: [{ role: 'user', parts: [{ text: prompt }] }]
     });

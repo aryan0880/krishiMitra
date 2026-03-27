@@ -1830,10 +1830,11 @@ const ChatPage = ({ language }: { language: Language }) => {
         body: JSON.stringify({ message: msg, language, context: { latestSensor: null } }),
       });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Chat failed');
       setMessages(prev => [...prev, { role: 'model', text: data.reply || "No reply" }]);
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      setMessages(prev => [...prev, { role: 'model', text: "Network error." }]);
+      setMessages(prev => [...prev, { role: 'model', text: `Error: ${e.message}` }]);
     } finally {
       setLoading(false);
     }
@@ -1888,6 +1889,7 @@ const DiagnosePage = ({ language }: { language: Language }) => {
   const [image, setImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1913,10 +1915,12 @@ const DiagnosePage = ({ language }: { language: Language }) => {
         body: JSON.stringify({ imageBase64: base64, mimeType, language }),
       });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to analyze image');
       setResult(data);
-    } catch (e) {
-      console.error(e);
-      alert('Error analyzing image. Ensure the server is running and Gemini key is set.');
+      setError(null);
+    } catch (e: any) {
+      setError(e.message);
+      setResult(null);
     } finally {
       setLoading(false);
     }
@@ -1990,6 +1994,18 @@ const DiagnosePage = ({ language }: { language: Language }) => {
             <p className="text-sm font-medium text-gray-700 whitespace-pre-line leading-relaxed">{result.treatment}</p>
           </div>
         </motion.div>
+      )}
+
+      {error && (
+        <div className="bg-red-50 p-6 rounded-3xl border border-red-100 shadow-sm flex items-center gap-4">
+          <div className="p-3 bg-red-100 text-red-600 rounded-2xl">
+            <Info size={24} />
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[10px] font-bold text-red-400 opacity-60 uppercase tracking-widest">Error</span>
+            <span className="text-sm font-bold text-red-700">{error}</span>
+          </div>
+        </div>
       )}
     </div>
   );
