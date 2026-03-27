@@ -1,8 +1,10 @@
 import 'dotenv/config';
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
 import {
   getAnalyticsSummary,
   getLatestSensorReading,
@@ -13,16 +15,43 @@ import {
   saveRecommendation,
   saveRecommendationRun,
   saveSensorReading,
+  createUser,
+  getUserByUsername,
+  getUserById,
+  updateUserProfile
 } from './db';
 
 const app = express();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Initialize Gemini
-const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
-// Hardcoded for now until auth is restored/added
-const DEFAULT_USER_ID = 1;
+const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_krishimitra';
+
+// Extend Express Request
+declare global {
+  namespace Express {
+    interface Request {
+      user?: { id: number; username: string };
+    }
+  }
+}
+
+const requireAuth = (req: Request, res: Response, next: NextFunction) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET) as { id: number; username: string };
+    req.user = decoded;
+    next();
+  } catch (err) {
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+};
 
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
@@ -525,11 +554,12 @@ async function generateGeminiRecommendation(
       - nextStage (string, the expected next growth stage)
     `;
 
-    const result = await genAI.models.generateContent({
-      model: 'gemini-1.5-flash',
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const result = await model.generateContent({
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
     });
-    const text = result.text ?? '';
+    const response = await result.response;
+    const text = response.text() ?? '';
     
     // Extract JSON from the response text
     const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -543,7 +573,7 @@ async function generateGeminiRecommendation(
   }
 }
 
-app.post('/api/recommendations', async (req, res) => {
+app.post('/api/recommendations', requireAuth, async (req, res) => {
   console.log('Received recommendation request:', req.body);
   try {
     const body: RecommendationRequest = req.body;
@@ -564,7 +594,7 @@ app.post('/api/recommendations', async (req, res) => {
     }
 
     const sensorReadingId = await saveSensorReading({
-      userId: DEFAULT_USER_ID,
+      userId: req.user!.id,
       crop: body.crop,
       stage: body.stage,
       moisture: body.moisture,
@@ -601,7 +631,7 @@ app.post('/api/recommendations', async (req, res) => {
     const fertilizerText = geminiRec?.fertilizerText || derived.fertilizerText;
 
     const runId = await saveRecommendationRun({
-      userId: DEFAULT_USER_ID,
+      userId: req.user!.id,
       sensorReadingId,
       crop: body.crop,
       stage: body.stage,
@@ -638,13 +668,13 @@ app.post('/api/recommendations', async (req, res) => {
   }
 });
 
-app.get('/api/soil-report/:id', async (req, res) => {
+app.get('/api/soil-report/:id', requireAuth, async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) {
     return res.status(400).json({ error: 'Invalid id' });
   }
 
-  const report = await getSoilReportByRunId(DEFAULT_USER_ID, id).catch(() => null);
+  const report = await getSoilReportByRunId(req.user!.id, id).catch(() => null);
   if (!report) {
     return res.status(404).json({ error: 'Not found' });
   }
@@ -699,15 +729,125 @@ app.get('/api/soil-report/:id', async (req, res) => {
   });
 });
 
-app.get('/api/sensors/latest', async (_req, res) => {
-  const row = await getLatestSensorReading(DEFAULT_USER_ID);
-  if (!row) return res.json(null);
+app.post('/api/diagnose', async (req, res) => {
+  try {
+    const { imageBase64, mimeType, language = 'English' } = req.body;
+    if (!imageBase64 || !mimeType) return res.status(400).json({ error: 'Missing image' });
+    
+    const prompt = `Identify any plant disease or nutrient deficiency in this image.
+Respond ONLY with a valid JSON file.
+Field descriptions:
+- disease: Name of the disease or "Healthy"
+- severity: "Low", "Medium", or "High"
+- affectedArea: estimated percentage of leaf/plant affected (number 0-100)
+- actions: array of strings containing specific treatment steps in ${language}.
+Format Example: {"disease": "Leaf Rust", "severity": "High", "affectedArea": 35, "actions": ["Remove affected leaves", "Apply fungicide"]}`;
+    
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const result = await model.generateContent({
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            { text: prompt },
+            {
+              inlineData: {
+                data: imageBase64,
+                mimeType: mimeType
+              }
+            }
+          ]
+        }
+      ]
+    });
+    console.log('Diagnose AI result:', JSON.stringify(result, null, 2));
+    const response = await result.response;
+    const text = response.text().replace(/```json/g, '').replace(/```/g, '').trim();
+    const data = JSON.parse(text);
+    res.json(data);
+  } catch (err: any) {
+    console.error('Diagnosis error:', err);
+    if (err.response) console.error('Error detail:', JSON.stringify(err.response, null, 2));
+    res.status(500).json({ error: 'AI diagnosis failed' });
+  }
+});
+
+app.post('/api/chat', async (req, res) => {
+  try {
+    const { message, language = 'English' } = req.body;
+    if (!message) return res.status(400).json({ error: 'Message required' });
+
+    const prompt = `You are KrishiMitra, an expert AI agronomist and farmer assistant.
+You are helping a farmer in India. Keep answers concise, practical, and highly accurate.
+Language to respond in: ${language}.
+User message: "${message}"`;
+
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const result = await model.generateContent({
+      contents: [{ role: 'user', parts: [{ text: prompt }] }]
+    });
+    console.log('Chat AI result:', JSON.stringify(result, null, 2));
+    const response = await result.response;
+    const reply = response.text();
+    
+    res.json({ reply });
+  } catch (err: any) {
+    console.error('Chat error:', err);
+    if (err.response) console.error('Error detail:', JSON.stringify(err.response, null, 2));
+    res.status(500).json({ error: 'AI chat failed' });
+  }
+});
+
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    if (!username || !password) return res.status(400).json({ error: 'Missing credentials' });
+    const existing = await getUserByUsername(username);
+    if (existing) return res.status(400).json({ error: 'Username taken' });
+    const passwordHash = await bcrypt.hash(password, 10);
+    const userId = await createUser({ username, passwordHash });
+    const token = jwt.sign({ id: userId, username }, JWT_SECRET, { expiresIn: '7d' });
+    res.json({ token, user: { id: userId, username } });
+  } catch (err: any) {
+    console.error('Register error:', err);
+    res.status(500).json({ error: 'Registration failed' });
+  }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    const user = await getUserByUsername(username);
+    if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+    const match = await bcrypt.compare(password, user.password_hash);
+    if (!match) return res.status(401).json({ error: 'Invalid credentials' });
+    const token = jwt.sign({ id: user.id, username }, JWT_SECRET, { expiresIn: '7d' });
+    res.json({ token, user: { id: user.id, username: user.username, language: user.language } });
+  } catch (err: any) {
+    console.error('Login error:', err);
+    res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+app.get('/api/auth/me', requireAuth, async (req, res) => {
+  try {
+    const user = await getUserById(req.user!.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    res.json({ user });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to fetch user' });
+  }
+});
+
+app.get('/api/sensors/latest', requireAuth, async (req, res) => {
+  const row = await getLatestSensorReading(req.user!.id);
+  if (!row) return res.status(200).json(null);
   res.json(row);
 });
 
-app.get('/api/sensors/history', async (req, res) => {
+app.get('/api/sensors/history', requireAuth, async (req, res) => {
   const limit = Number(req.query.limit || 5);
-  const rows = await getSensorHistory(DEFAULT_USER_ID, Number.isFinite(limit) ? limit : 5);
+  const rows = await getSensorHistory(req.user!.id, Number.isFinite(limit) ? limit : 5);
   res.json(rows);
 });
 
@@ -736,7 +876,7 @@ function startSensorSimulator() {
   const tick = async () => {
     try {
       if (!bootstrapped) {
-        const latest = await getLatestSensorReading(DEFAULT_USER_ID);
+        const latest = await getLatestSensorReading(1); // SIMULATOR_USER_ID
         if (latest) {
           last = {
             crop: latest.crop ?? last.crop,
@@ -764,7 +904,7 @@ function startSensorSimulator() {
       const crop = last.crop;
 
       await saveSensorReading({
-        userId: DEFAULT_USER_ID,
+        userId: 1, // SIMULATOR_USER_ID
         crop,
         stage,
         moisture,
@@ -799,9 +939,36 @@ function startSensorSimulator() {
   console.log(`Sensor simulator enabled (interval ${intervalMs}ms)`);
 }
 
-app.get('/api/analytics/summary', async (_req, res) => {
-  const summary = await getAnalyticsSummary(DEFAULT_USER_ID);
+app.get('/api/analytics/summary', requireAuth, async (req, res) => {
+  const summary = await getAnalyticsSummary(req.user!.id);
   res.json(summary);
+});
+
+app.get('/api/history', requireAuth, async (req, res) => {
+  try {
+    const limit = Number(req.query.limit || 10);
+    const db = await (await import('./db.js')).getDb();
+    const rows = await db.all(`
+      SELECT 
+        rr.id as run_id, 
+        rr.created_at, 
+        rr.crop, 
+        rr.stage, 
+        rr.irrigation_text, 
+        rr.fertilizer_text,
+        rr.irrigation_mm,
+        rr.fertilizer_n_kg,
+        rr.fertilizer_p_kg,
+        rr.fertilizer_k_kg
+      FROM recommendation_runs rr
+      WHERE rr.user_id = ?
+      ORDER BY datetime(rr.created_at) DESC
+      LIMIT ?
+    `, req.user!.id, limit);
+    res.json(rows);
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to fetch history' });
+  }
 });
 
 app.get('*', (req, res) => {

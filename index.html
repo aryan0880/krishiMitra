@@ -2,12 +2,37 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My Google AI Studio App</title>
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+    <!-- SEO -->
+    <title>KrishiMitra – AI Farmer Assistant | Smart Farming Decisions</title>
+    <meta name="description" content="KrishiMitra empowers Indian farmers with AI-driven soil health, irrigation, and fertilizer recommendations in English, Hindi, and Marathi. Free forever." />
+    <meta name="keywords" content="smart farming, AI agriculture, soil health, irrigation, fertilizer, krishi, India" />
+    <meta name="author" content="KrishiMitra" />
+
+    <!-- PWA / Theme -->
+    <meta name="theme-color" content="#1f4d2b" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="KrishiMitra" />
+    <meta name="mobile-web-app-capable" content="yes" />
+
+    <!-- Safe areas for phones with notches -->
+    <style>
+      body {
+        padding-top: env(safe-area-inset-top);
+        padding-bottom: env(safe-area-inset-bottom);
+      }
+    </style>
+
+    <!-- Open Graph -->
+    <meta property="og:title" content="KrishiMitra – AI Farmer Assistant" />
+    <meta property="og:description" content="AI-powered soil health, irrigation, and fertilizer recommendations for Indian farmers." />
+    <meta property="og:type" content="website" />
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-

@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -20,14 +21,25 @@ import {
   Menu,
   Sparkles,
   Sprout,
-  CircleUser
+  CircleUser,
+  Camera,
+  MessageCircle,
+  ArrowLeft
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
+const getToken = () => localStorage.getItem('km_token');
+const authHeaders = (): Record<string, string> => {
+  const t = getToken();
+  return t
+    ? { 'Content-Type': 'application/json', Authorization: `Bearer ${t}` }
+    : { 'Content-Type': 'application/json' };
+};
+
 // --- Types ---
-type Screen = 'landing' | 'signup' | 'input' | 'dashboard' | 'report';
+type Screen = 'landing' | 'signup' | 'input' | 'dashboard' | 'report' | 'diagnose' | 'chat';
 type Language = 'English' | 'Hindi' | 'Marathi';
 type CropStage = 'Seedling' | 'Vegetative' | 'Flowering' | 'Harvest';
 type Crop = 'Maize' | 'Wheat' | 'Rice' | 'Cotton';
@@ -112,7 +124,7 @@ type SoilReportResponse = {
 
 const COPY: Record<Language, any> = {
   English: {
-    nav: { home: 'Home', input: 'Input', analysis: 'Analysis', profile: 'Profile' },
+    nav: { home: 'Home', input: 'Input', analysis: 'Analysis', profile: 'Profile', diagnose: 'Diagnose', chat: 'Ask AI' },
     landing: {
       heroTitle1: 'Smart Farming',
       heroTitle2: 'Decisions, Simplified',
@@ -218,7 +230,7 @@ const COPY: Record<Language, any> = {
     },
   },
   Hindi: {
-    nav: { home: 'होम', input: 'इनपुट', analysis: 'विश्लेषण', profile: 'प्रोफाइल' },
+    nav: { home: 'होम', input: 'इनपुट', analysis: 'विश्लेषण', profile: 'प्रोफाइल', diagnose: 'निदान', chat: 'AI से पूछें' },
     landing: {
       heroTitle1: 'स्मार्ट खेती',
       heroTitle2: 'निर्णय, सरल किए गए',
@@ -324,7 +336,7 @@ const COPY: Record<Language, any> = {
     },
   },
   Marathi: {
-    nav: { home: 'होम', input: 'इनपुट', analysis: 'विश्लेषण', profile: 'प्रोफाइल' },
+    nav: { home: 'होम', input: 'इनपुट', analysis: 'विश्लेषण', profile: 'प्रोफाइल', diagnose: 'निदान', chat: 'AI ला विचारा' },
     landing: {
       heroTitle1: 'स्मार्ट शेती',
       heroTitle2: 'निर्णय, सोपे करून',
@@ -443,9 +455,10 @@ const BottomNav = ({
   language: Language;
 }) => {
   const tabs = [
-    { id: 'home', label: COPY[language].nav.home, icon: Home, screen: 'landing' as Screen },
     { id: 'input', label: COPY[language].nav.input, icon: LayoutGrid, screen: 'input' as Screen },
+    { id: 'diagnose', label: COPY[language].nav.diagnose, icon: Camera, screen: 'diagnose' as Screen },
     { id: 'analysis', label: COPY[language].nav.analysis, icon: ClipboardList, screen: 'dashboard' as Screen },
+    { id: 'chat', label: COPY[language].nav.chat, icon: MessageCircle, screen: 'chat' as Screen },
     { id: 'profile', label: COPY[language].nav.profile, icon: User, screen: 'profile' as Screen },
   ];
 
@@ -1796,6 +1809,193 @@ const ProfilePage = ({
   );
 };
 
+const ChatPage = ({ language }: { language: Language }) => {
+  const [messages, setMessages] = useState<{role: 'user'|'model', text: string}[]>([
+    { role: 'model', text: COPY[language].nav.chat === 'Ask AI' ? "Namaste! I'm KrishiMitra AI. Ask me anything about your farm." : COPY[language].nav.chat === 'AI से पूछें' ? "नमस्ते! मैं कृषि मित्र AI हूँ। अपने खेत के बारे में कुछ भी पूछें।" : "नमस्कार! मी कृषी मित्र AI आहे. तुमच्या शेताबद्दल काहीही विचारा." }
+  ]);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const sendMessage = async () => {
+    if (!input.trim()) return;
+    const msg = input.trim();
+    setInput('');
+    setMessages(prev => [...prev, { role: 'user', text: msg }]);
+    setLoading(true);
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/chat`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ message: msg, language, context: { latestSensor: null } }),
+      });
+      const data = await res.json();
+      setMessages(prev => [...prev, { role: 'model', text: data.reply || "No reply" }]);
+    } catch (e) {
+      console.error(e);
+      setMessages(prev => [...prev, { role: 'model', text: "Network error." }]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-[85vh] bg-[#f9f8f2] -mx-5 -mt-6">
+      <div className="flex-1 overflow-y-auto p-5 space-y-4 pb-24 pt-6">
+        {messages.map((m, i) => (
+          <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+            <div className={`p-3 rounded-2xl max-w-[80%] shadow-sm ${m.role === 'user' ? 'bg-[#1f4d2b] text-white rounded-br-none' : 'glass rounded-bl-none text-gray-800'}`}>
+              <p className="text-sm whitespace-pre-wrap">{m.text}</p>
+            </div>
+          </div>
+        ))}
+        {loading && (
+          <div className="flex justify-start">
+            <div className="glass p-3 rounded-2xl rounded-bl-none">
+              <div className="flex gap-2 items-center">
+                <span className="w-2 h-2 rounded-full bg-[#3d9a57] animate-pulse"></span>
+                <span className="w-2 h-2 rounded-full bg-[#3d9a57] animate-pulse delay-75"></span>
+                <span className="w-2 h-2 rounded-full bg-[#3d9a57] animate-pulse delay-150"></span>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+      <div className="fixed bottom-[88px] left-1/2 -translate-x-1/2 w-full max-w-md px-4">
+        <div className="flex gap-2 bg-white/80 backdrop-blur-md p-2 rounded-2xl shadow-lg border border-gray-100">
+          <input 
+            type="text" 
+            value={input} 
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && sendMessage()}
+            className="flex-1 px-4 py-2 bg-transparent outline-none text-gray-800"
+            placeholder="Type your message..."
+          />
+          <button 
+            onClick={sendMessage}
+            disabled={!input.trim() || loading}
+            className="p-3 bg-[#1f4d2b] text-white rounded-xl hover:bg-[#2d6b3e] transition-colors flex items-center justify-center disabled:opacity-50"
+          >
+            <ArrowRight size={20} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const DiagnosePage = ({ language }: { language: Language }) => {
+  const [image, setImage] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<any>(null);
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImage(reader.result as string);
+        setResult(null);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const analyzeImage = async () => {
+    if (!image) return;
+    setLoading(true);
+    try {
+      const mimeType = image.split(';')[0].split(':')[1];
+      const base64 = image.split(',')[1];
+      const res = await fetch(`${API_BASE_URL}/api/diagnose`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ imageBase64: base64, mimeType, language }),
+      });
+      const data = await res.json();
+      setResult(data);
+    } catch (e) {
+      console.error(e);
+      alert('Error analyzing image. Ensure the server is running and Gemini key is set.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="pb-24 space-y-6 pt-2">
+      <div className="text-center space-y-2">
+        <div className="w-16 h-16 bg-[#1f4d2b] rounded-full flex items-center justify-center mx-auto shadow-lg glow-green">
+          <Camera className="text-white" size={32} />
+        </div>
+        <h2 className="text-2xl font-black text-[#0f2d17] mt-4 tracking-tight">AI Diagnostic</h2>
+        <p className="text-gray-500 text-sm font-medium">Upload a photo of your affected crop for instant AI analysis.</p>
+      </div>
+      
+      {!image ? (
+        <label className="flex flex-col items-center justify-center w-full h-64 border-2 border-dashed border-[#3d9a57] rounded-3xl bg-green-50/50 cursor-pointer hover:bg-green-100/50 transition-colors shadow-inner relative overflow-hidden">
+           <div className="absolute inset-0 bg-gradient-to-br from-green-500/5 to-transparent pointer-events-none"></div>
+          <div className="flex flex-col items-center justify-center pt-5 pb-6">
+            <Camera className="w-10 h-10 text-[#3d9a57] mb-3" />
+            <p className="mb-2 text-sm text-[#1f4d2b] font-bold">Tap to upload photo</p>
+            <p className="text-xs text-[#3d9a57]">JPEG, PNG, WebP</p>
+          </div>
+          <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+        </label>
+      ) : (
+        <div className="space-y-4">
+          <div className="relative rounded-3xl overflow-hidden shadow-xl border-4 border-white">
+            <img src={image} alt="Crop" className="w-full h-64 object-cover" />
+            <button 
+              onClick={() => { setImage(null); setResult(null); }}
+              className="absolute top-3 right-3 py-1.5 px-3 bg-white/90 backdrop-blur-sm shadow-md rounded-full text-red-500 text-xs font-bold hover:bg-white transition-colors"
+            >
+              Clear
+            </button>
+          </div>
+          {!result && (
+            <button 
+              onClick={analyzeImage}
+              disabled={loading}
+              className="w-full bg-[#1f4d2b] text-white py-4 rounded-xl font-bold hover:bg-[#2d6b3e] transition-all flex justify-center items-center gap-2 shadow-lg glow-green"
+            >
+              {loading ? <span className="animate-pulse flex items-center gap-2"><Sparkles className="animate-spin" size={18} /> Analyzing Image...</span> : <>Analyze Crop Disease <ArrowRight size={18} /></>}
+            </button>
+          )}
+        </div>
+      )}
+
+      {result && (
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="glass p-5 rounded-3xl space-y-4 shadow-xl border-2 border-green-500/20"
+        >
+          <div className="flex items-center gap-4">
+             <div className="w-14 h-14 rounded-full bg-red-50 flex flex-col items-center justify-center border border-red-100 shadow-inner">
+               <span className="text-red-500 font-bold text-lg leading-none">{result.severityScore}</span>
+               <span className="text-red-400 text-[10px] uppercase font-bold">/10 Risk</span>
+             </div>
+             <div className="flex-1">
+               <h3 className="font-bold text-[#0f2d17] text-lg leading-snug">{result.diseaseName}</h3>
+               <div className="flex items-center gap-1 mt-1">
+                 <div className="w-full bg-gray-200 rounded-full h-1.5">
+                   <div className="bg-[#3d9a57] h-1.5 rounded-full" style={{ width: `${Math.round((result.confidence || 1) * 100)}%` }}></div>
+                 </div>
+                 <span className="text-[10px] text-gray-500 font-bold ml-1">{Math.round((result.confidence || 1) * 100)}%</span>
+               </div>
+             </div>
+          </div>
+          <div className="bg-white/80 p-4 rounded-2xl border border-gray-100 shadow-sm">
+            <p className="text-sm font-medium text-gray-700 whitespace-pre-line leading-relaxed">{result.treatment}</p>
+          </div>
+        </motion.div>
+      )}
+    </div>
+  );
+};
+
+
 // --- Main App ---
 
 export default function App() {
@@ -1927,6 +2127,10 @@ export default function App() {
             }}
           />
         );
+      case 'chat':
+        return <ChatPage language={language} />;
+      case 'diagnose':
+        return <DiagnosePage language={language} />;
       case 'profile':
         return (
           <ProfilePage
@@ -1953,10 +2157,12 @@ export default function App() {
   };
 
   const getActiveTab = () => {
-    if (currentScreen === 'landing') return 'home';
     if (currentScreen === 'input') return 'input';
+    if (currentScreen === 'diagnose') return 'diagnose';
+    if (currentScreen === 'chat') return 'chat';
     if (currentScreen === 'dashboard' || currentScreen === 'report') return 'analysis';
-    return 'home';
+    if (currentScreen === 'profile') return 'profile';
+    return '';
   };
 
   return (
